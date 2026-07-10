@@ -24,6 +24,32 @@ A scalable, secure Learning Management System backend built with NestJS, TypeScr
 
 ## 🛠️ Installation
 
+### Option 1: Docker (Recommended for Production)
+
+**For VPS deployment with 6 cores, 8GB RAM:**
+
+```bash
+# Quick start
+git clone <repository-url> lms-platform && cd lms-platform
+make install  # Interactive setup with prompts
+
+# Or manual
+cp .env.docker .env
+nano .env  # Edit credentials
+make build && make up
+```
+
+**Includes:**
+
+- 3x NestJS instances (load balanced)
+- MongoDB + Redis
+- Nginx reverse proxy
+- Automatic health checks
+
+See [DOCKER_README.md](DOCKER_README.md) for complete guide.
+
+### Option 2: Local Development
+
 1. **Clone the repository**
 
 ```bash

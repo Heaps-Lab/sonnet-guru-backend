@@ -55,3 +55,14 @@ bun.lock
 # Upload directories
 /uploads
 /public/uploads
+
+# Docker
+docker-compose.override.yml
+
+# SSL Certificates
+nginx/ssl/*.crt
+nginx/ssl/*.key
+nginx/ssl/*.pem
+
+# Nginx logs
+nginx/logs/

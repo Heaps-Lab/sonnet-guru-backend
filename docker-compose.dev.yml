@@ -1,0 +1,67 @@
+version: '3.9'
+
+# Development Docker Compose - Lightweight for local testing
+services:
+  mongodb:
+    image: mongo:7.0-jammy
+    container_name: lms_mongodb_dev
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+      MONGO_INITDB_DATABASE: lms_platform_dev
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongodb_dev_data:/data/db
+    networks:
+      - lms_dev_network
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: lms_redis_dev
+    restart: unless-stopped
+    command: redis-server --requirepass redis123
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_dev_data:/data
+    networks:
+      - lms_dev_network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lms_app_dev
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      API_PREFIX: api/v1
+      MONGODB_URI: mongodb://admin:admin123@mongodb:27017/lms_platform_dev?authSource=admin
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis123
+      JWT_SECRET: dev-secret-key
+      JWT_EXPIRATION: 7d
+      CORS_ORIGIN: '*'
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./src:/app/src
+      - app_dev_uploads:/app/uploads
+    networks:
+      - lms_dev_network
+    depends_on:
+      - mongodb
+      - redis
+
+networks:
+  lms_dev_network:
+    driver: bridge
+
+volumes:
+  mongodb_dev_data:
+  redis_dev_data:
+  app_dev_uploads:
