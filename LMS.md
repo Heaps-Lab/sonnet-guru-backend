@@ -10,7 +10,7 @@
 
 To maximize the performance of a single **4 Core, 8GB RAM VPS**, the system architecture adheres to the following paradigms:
 
-1. **Decoupled Video Streaming:** Video transcoding (FFmpeg processing) and delivery are explicitly completely decoupled from the VPS. Videos are uploaded to external secured object storage (e.g., AWS S3 or Bunny.net) and distributed globally via a CDN (e.g., Cloudflare/CloudFront) using **HLS (HTTP Live Streaming)**. The VPS only stores metadata URLs.
+1. **Decoupled Video Streaming:** Video transcoding (FFmpeg processing) and delivery are explicitly completely decoupled from the VPS. Videos are uploaded to external secured object storage (e.g., Bunny.net or DigitalOcean Spaces) and distributed globally via a CDN (e.g., Cloudflare or BunnyCDN) using **HLS (HTTP Live Streaming)**. The VPS only stores metadata URLs.
 2. **Memory Allocation Strategy:**
    - **NestJS App Instance:** Allocated up to ~2.5 GB RAM via PM2 clustering (2-3 cluster instances matching available cores).
    - **MongoDB (Mongoose):** Allocated ~3.5 GB RAM with strict index optimizations to reduce disk I/O.
