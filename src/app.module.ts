@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { MongooseModule } from '@nestjs/mongoose';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
@@ -18,13 +18,21 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
       envFilePath: '.env',
     }),
 
-    // MongoDB connection
-    MongooseModule.forRootAsync({
+    // TypeORM MySQL connection
+    TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
-        uri: configService.get<string>('MONGODB_URI'),
-        retryAttempts: 3,
-        retryDelay: 1000,
+        type: 'mysql',
+        host: configService.get<string>('DB_HOST'),
+        port: configService.get<number>('DB_PORT'),
+        username: configService.get<string>('DB_USERNAME'),
+        password: configService.get<string>('DB_PASSWORD'),
+        database: configService.get<string>('DB_DATABASE'),
+        entities: [__dirname + '/**/*.entity{.ts,.js}'],
+        synchronize: false, // Always false in production
+        logging: configService.get('NODE_ENV') === 'development',
+        charset: 'utf8mb4',
+        timezone: 'Z',
       }),
       inject: [ConfigService],
     }),

@@ -21,7 +21,7 @@ export class AuthService {
 
   async register(registerDto: RegisterDto) {
     const user = await this.usersService.create(registerDto);
-    const { password, ...result } = (user as any).toObject();
+    const { password, ...result } = user;
     return result;
   }
 
@@ -96,14 +96,11 @@ export class AuthService {
       ];
     }
 
-    await this.usersService.updateSessions(
-      user._id.toString(),
-      updatedSessions,
-    );
+    await this.usersService.updateSessions(user.id.toString(), updatedSessions);
 
     // Generate JWT
     const payload = {
-      sub: user._id.toString(),
+      sub: user.id.toString(),
       email: user.email,
       role: user.role,
       sessionId,
@@ -113,7 +110,7 @@ export class AuthService {
     return {
       accessToken,
       user: {
-        id: user._id.toString(),
+        id: user.id.toString(),
         name: user.name,
         email: user.email,
         role: user.role,
