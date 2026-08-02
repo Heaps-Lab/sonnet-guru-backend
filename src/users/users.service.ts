@@ -20,6 +20,19 @@ export class UsersService {
     return this.userRepository.save(user);
   }
 
+  /**
+   * Used only for login credential verification. Explicitly re-selects the
+   * password hash since the column is `select: false` by default on the
+   * entity to prevent it leaking through any other query/relation join.
+   */
+  async findByEmailWithPassword(email: string): Promise<User | null> {
+    return this.userRepository
+      .createQueryBuilder('user')
+      .addSelect('user.password')
+      .where('user.email = :email', { email })
+      .getOne();
+  }
+
   async findByEmail(email: string): Promise<User | null> {
     return this.userRepository.findOne({ where: { email } });
   }

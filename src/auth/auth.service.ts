@@ -29,8 +29,8 @@ export class AuthService {
   async login(loginDto: LoginDto) {
     const { email, password, deviceId, deviceName } = loginDto;
 
-    // Find user
-    const user = await this.usersService.findByEmail(email);
+    // Find user (with password hash, needed for credential validation)
+    const user = await this.usersService.findByEmailWithPassword(email);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }

@@ -43,10 +43,12 @@ export class CoursesService {
   }
 
   async findAll(user?: User): Promise<Course[]> {
+    // Note: modules are intentionally NOT joined/returned here. The list
+    // endpoint is meant to be a lightweight course directory; full module
+    // content is only returned from findOne() (GET /courses/:id).
     const queryBuilder = this.courseRepository
       .createQueryBuilder('course')
       .leftJoinAndSelect('course.instructor', 'instructor')
-      .leftJoinAndSelect('course.modules', 'modules')
       .where('course.isActive = :isActive', { isActive: true });
 
     // If user is not admin/super admin, only show published courses
