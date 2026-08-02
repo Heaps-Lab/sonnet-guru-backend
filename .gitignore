@@ -66,3 +66,6 @@ nginx/ssl/*.pem
 
 # Nginx logs
 nginx/logs/
+
+# Markdown documentation files
+*.md

@@ -34,6 +34,7 @@ export class AuthController {
           id: '550e8400-e29b-41d4-a716-446655440000',
           name: 'John Doe',
           email: 'john.doe@example.com',
+          phoneNumber: '+8801712345678',
           role: 'Student',
           isActive: true,
           createdAt: '2024-07-16T10:30:00.000Z',

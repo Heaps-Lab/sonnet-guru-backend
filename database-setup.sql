@@ -21,6 +21,7 @@ CREATE TABLE users (
   id VARCHAR(36) PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   email VARCHAR(255) NOT NULL UNIQUE,
+  phoneNumber VARCHAR(20) NULL,
   password VARCHAR(255) NOT NULL,
   role ENUM('Super Admin', 'Admin', 'Teacher', 'Student') NOT NULL DEFAULT 'Student',
   isActive BOOLEAN NOT NULL DEFAULT TRUE,
@@ -28,6 +29,7 @@ CREATE TABLE users (
   createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_users_email (email),
+  INDEX idx_users_phone (phoneNumber),
   INDEX idx_users_role (role)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

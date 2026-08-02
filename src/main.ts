@@ -47,8 +47,11 @@ async function bootstrap() {
     .addTag('Users', 'User management endpoints')
     .addTag('Courses', 'Course creation and management')
     .addTag('Modules', 'Course module and content management')
+    .addTag('Files', 'Video streaming and file downloads')
     .addTag('Quizzes', 'Quiz and assessment management')
+    .addTag('Quiz Submissions', 'Student quiz submission and results')
     .addTag('Payments', 'Payment claims and enrollment processing')
+    .addTag('Enrollments', 'Course enrollment management')
     .addBearerAuth(
       {
         type: 'http',

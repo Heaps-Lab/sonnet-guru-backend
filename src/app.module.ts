@@ -7,6 +7,10 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { CoursesModule } from './courses/courses.module';
+import { ModulesModule } from './modules/modules.module';
+import { QuizzesModule } from './quizzes/quizzes.module';
+import { PaymentsModule } from './payments/payments.module';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
@@ -52,10 +56,10 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     // Feature modules
     AuthModule,
     UsersModule,
-    // CoursesModule,
-    // ModulesModule,
-    // QuizzesModule,
-    // PaymentsModule,
+    CoursesModule,
+    ModulesModule,
+    QuizzesModule,
+    PaymentsModule,
   ],
   controllers: [AppController],
   providers: [

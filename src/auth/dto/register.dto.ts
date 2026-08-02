@@ -5,9 +5,11 @@ import {
   MinLength,
   IsEnum,
   IsOptional,
+  IsMobilePhone,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Role } from '../../common/enums/role.enum';
+import { Column } from 'typeorm';
 
 export class RegisterDto {
   @ApiProperty({
@@ -25,6 +27,15 @@ export class RegisterDto {
   @IsEmail()
   @IsNotEmpty()
   email: string;
+
+  @ApiProperty({
+    description: 'Phone number (international format)',
+    example: '+8801712345678',
+  })
+  @IsMobilePhone()
+  @IsNotEmpty()
+  @Column({ type: 'varchar', length: 11, nullable: false })
+  phoneNumber: string;
 
   @ApiProperty({
     description: 'Password (minimum 6 characters)',

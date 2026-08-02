@@ -23,6 +23,9 @@ export class Course {
   @Column({ type: 'text' })
   description: string;
 
+  @Column({ type: 'text', nullable: true })
+  fullDescription: string;
+
   @Column({ type: 'uuid' })
   instructorId: string;
 
@@ -36,8 +39,20 @@ export class Course {
   @Column({ type: 'boolean', default: true })
   isPublished: boolean;
 
+  @Column({ type: 'boolean', default: true })
+  isActive: boolean;
+
   @Column({ type: 'varchar', length: 500, nullable: true })
   thumbnailUrl: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  category: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  level: string;
+
+  @Column({ type: 'int', default: 0 })
+  totalDuration: number;
 
   @Column({ type: 'int', default: 0 })
   enrollmentCount: number;

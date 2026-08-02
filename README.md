@@ -254,3 +254,5 @@ Contributions are welcome! Please read the contributing guidelines before submit
 ## 📧 Support
 
 For support and queries, contact the development team.
+
+<!-- "start:prod": "DB_HOST=\"127.0.0.1\" DB_USER=\"serversonnetguru_LMS\" DB_PASSWORD=\"?D#+D6WJjI4]A^1o\" DB_DATABASE=\"serversonnetguru_LMS\" node dist/src/main.js" -->

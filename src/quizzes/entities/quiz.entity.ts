@@ -5,9 +5,12 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
+  OneToMany,
   JoinColumn,
 } from 'typeorm';
 import { Module } from '../../modules/entities/module.entity';
+import { QuizQuestion } from './quiz-question.entity';
+import { QuizSubmission } from './quiz-submission.entity';
 
 @Entity('quizzes')
 export class Quiz {
@@ -36,20 +39,26 @@ export class Quiz {
   @Column({ type: 'int', default: 0 })
   passingMarks: number;
 
-  @Column({ type: 'boolean', default: true })
+  @Column({ type: 'boolean', default: false })
   isPublished: boolean;
 
-  @Column({ type: 'json' })
-  questions: {
-    questionText: string;
-    options: {
-      optionIndex: number;
-      text: string;
-    }[];
-    correctOptionIndex: number;
-    explanation: string;
-    negativeMarking: number;
-  }[];
+  @Column({ type: 'boolean', default: true })
+  isActive: boolean;
+
+  @Column({ type: 'int', default: 1 })
+  maxAttempts: number;
+
+  @Column({ type: 'boolean', default: false })
+  shuffleQuestions: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  showResultsImmediately: boolean;
+
+  @OneToMany(() => QuizQuestion, (question) => question.quiz, { cascade: true })
+  questions: QuizQuestion[];
+
+  @OneToMany(() => QuizSubmission, (submission) => submission.quiz)
+  submissions: QuizSubmission[];
 
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;

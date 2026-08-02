@@ -10,6 +10,8 @@ import {
 } from 'typeorm';
 import { Course } from '../../courses/entities/course.entity';
 import { Quiz } from '../../quizzes/entities/quiz.entity';
+import { Video } from './video.entity';
+import { ModuleSheet } from './module-sheet.entity';
 
 @Entity('modules')
 export class Module {
@@ -32,24 +34,20 @@ export class Module {
   @Column({ type: 'int' })
   sequenceOrder: number;
 
-  @Column({ type: 'boolean', default: true })
+  @Column({ type: 'boolean', default: false })
   isPublished: boolean;
 
-  @Column({ type: 'json', nullable: true })
-  sheets: {
-    title: string;
-    fileUrl: string;
-    isDownloadable: boolean;
-    uploadedAt: Date;
-  }[];
+  @Column({ type: 'boolean', default: false })
+  isCompleted: boolean; // Track if module creation is finished
 
-  @Column({ type: 'json', nullable: true })
-  videos: {
-    title: string;
-    videoUrl: string;
-    duration: number;
-    hlsPlaylistUrl: string;
-  }[];
+  @Column({ type: 'int', default: 0 })
+  totalDuration: number; // Total duration of all videos in minutes
+
+  @OneToMany(() => Video, (video) => video.module, { cascade: true })
+  videos: Video[];
+
+  @OneToMany(() => ModuleSheet, (sheet) => sheet.module, { cascade: true })
+  sheets: ModuleSheet[];
 
   @OneToMany(() => Quiz, (quiz) => quiz.module)
   quizzes: Quiz[];

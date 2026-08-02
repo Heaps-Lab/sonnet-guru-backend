@@ -22,10 +22,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user) {
       throw new UnauthorizedException();
     }
+    // Return the user entity (minus password hash) so downstream code
+    // (e.g. @CurrentUser() user: User) has access to user.id, user.role, etc.
+    // Attach sessionId from the JWT payload.
+    const { password, ...safeUser } = user;
     return {
-      userId: payload.sub,
-      email: payload.email,
-      role: payload.role,
+      ...safeUser,
       sessionId: payload.sessionId,
     };
   }
