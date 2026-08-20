@@ -10,6 +10,7 @@ import { Module } from './entities/module.entity';
 import { Video } from './entities/video.entity';
 import { ModuleSheet } from './entities/module-sheet.entity';
 import { Course } from '../courses/entities/course.entity';
+import { Enrollment } from '../payments/entities/enrollment.entity';
 import { CreateModuleDto } from './dto/create-module.dto';
 import { UpdateModuleDto } from './dto/update-module.dto';
 import { UploadVideoDto } from './dto/upload-video.dto';
@@ -32,6 +33,8 @@ export class ModulesService {
     private sheetRepository: Repository<ModuleSheet>,
     @InjectRepository(Course)
     private courseRepository: Repository<Course>,
+    @InjectRepository(Enrollment)
+    private enrollmentRepository: Repository<Enrollment>,
     private dataSource: DataSource,
   ) {}
 
@@ -76,32 +79,66 @@ export class ModulesService {
       throw new NotFoundException('Course not found');
     }
 
-    // Check if course is published or user has access
-    if (
-      !course.isPublished &&
-      (!user ||
-        (![Role.SUPER_ADMIN, Role.ADMIN].includes(user.role) &&
-          (user.role !== Role.TEACHER || course.instructorId !== user.id)))
-    ) {
+    // SUPER_ADMIN / ADMIN: full access always
+    if (user && [Role.SUPER_ADMIN, Role.ADMIN].includes(user.role)) {
+      return this.moduleRepository
+        .createQueryBuilder('module')
+        .leftJoinAndSelect('module.videos', 'videos')
+        .leftJoinAndSelect('module.sheets', 'sheets')
+        .where('module.courseId = :courseId', { courseId })
+        .orderBy('module.sequenceOrder', 'ASC')
+        .addOrderBy('videos.sequenceNumber', 'ASC')
+        .getMany();
+    }
+
+    // TEACHER: full access to their own course
+    if (user && user.role === Role.TEACHER && course.instructorId === user.id) {
+      return this.moduleRepository
+        .createQueryBuilder('module')
+        .leftJoinAndSelect('module.videos', 'videos')
+        .leftJoinAndSelect('module.sheets', 'sheets')
+        .where('module.courseId = :courseId', { courseId })
+        .orderBy('module.sequenceOrder', 'ASC')
+        .addOrderBy('videos.sequenceNumber', 'ASC')
+        .getMany();
+    }
+
+    // STUDENT: must be enrolled
+    if (user && user.role === Role.STUDENT) {
+      const enrollment = await this.enrollmentRepository.findOne({
+        where: { userId: user.id, courseId, isActive: true },
+      });
+
+      if (!enrollment) {
+        throw new ForbiddenException(
+          'You are not enrolled in this course. Please enroll to access the modules.',
+        );
+      }
+
+      return this.moduleRepository
+        .createQueryBuilder('module')
+        .leftJoinAndSelect('module.videos', 'videos')
+        .leftJoinAndSelect('module.sheets', 'sheets')
+        .where('module.courseId = :courseId', { courseId })
+        .orderBy('module.sequenceOrder', 'ASC')
+        .addOrderBy('videos.sequenceNumber', 'ASC')
+        .getMany();
+    }
+
+    // Unauthenticated / others: course must be published, only published modules
+    if (!course.isPublished) {
       throw new ForbiddenException('Course not accessible');
     }
 
-    const queryBuilder = this.moduleRepository
+    return this.moduleRepository
       .createQueryBuilder('module')
       .leftJoinAndSelect('module.videos', 'videos')
       .leftJoinAndSelect('module.sheets', 'sheets')
       .where('module.courseId = :courseId', { courseId })
+      .andWhere('module.isPublished = :isPublished', { isPublished: true })
       .orderBy('module.sequenceOrder', 'ASC')
-      .addOrderBy('videos.sequenceNumber', 'ASC');
-
-    // If user is student, only show published modules
-    if (!user || user.role === Role.STUDENT) {
-      queryBuilder.andWhere('module.isPublished = :isPublished', {
-        isPublished: true,
-      });
-    }
-
-    return queryBuilder.getMany();
+      .addOrderBy('videos.sequenceNumber', 'ASC')
+      .getMany();
   }
 
   async findOne(id: string, user?: User): Promise<Module> {
@@ -119,14 +156,37 @@ export class ModulesService {
       throw new NotFoundException('Module not found');
     }
 
-    // Check permissions
+    // SUPER_ADMIN / ADMIN: full access always
+    if (user && [Role.SUPER_ADMIN, Role.ADMIN].includes(user.role)) {
+      return module;
+    }
+
+    // TEACHER: full access to their own course
     if (
-      !module.course.isPublished &&
-      (!user ||
-        (![Role.SUPER_ADMIN, Role.ADMIN].includes(user.role) &&
-          (user.role !== Role.TEACHER ||
-            module.course.instructorId !== user.id)))
+      user &&
+      user.role === Role.TEACHER &&
+      module.course.instructorId === user.id
     ) {
+      return module;
+    }
+
+    // STUDENT: must be enrolled in the course
+    if (user && user.role === Role.STUDENT) {
+      const enrollment = await this.enrollmentRepository.findOne({
+        where: { userId: user.id, courseId: module.courseId, isActive: true },
+      });
+
+      if (!enrollment) {
+        throw new ForbiddenException(
+          'You are not enrolled in this course. Please enroll to access this module.',
+        );
+      }
+
+      return module;
+    }
+
+    // Unauthenticated / others: course must be published
+    if (!module.course.isPublished) {
       throw new ForbiddenException('Module not accessible');
     }
 
@@ -385,7 +445,7 @@ export class ModulesService {
 
   async getVideo(
     fileName: string,
-    user?: User,
+    user: User,
   ): Promise<{ filePath: string; mimeType: string }> {
     const video = await this.videoRepository
       .createQueryBuilder('video')
@@ -398,14 +458,30 @@ export class ModulesService {
       throw new NotFoundException('Video not found');
     }
 
-    // Check if user has access to the video
-    if (
-      !video.module.course.isPublished &&
-      (!user ||
-        (![Role.SUPER_ADMIN, Role.ADMIN].includes(user.role) &&
-          (user.role !== Role.TEACHER ||
-            video.module.course.instructorId !== user.id)))
-    ) {
+    const course = video.module.course;
+
+    // SUPER_ADMIN / ADMIN: always allowed
+    if ([Role.SUPER_ADMIN, Role.ADMIN].includes(user.role)) {
+      // pass through
+    }
+    // TEACHER: allowed for their own course
+    else if (user.role === Role.TEACHER && course.instructorId === user.id) {
+      // pass through
+    }
+    // STUDENT: must be enrolled
+    else if (user.role === Role.STUDENT) {
+      const enrollment = await this.enrollmentRepository.findOne({
+        where: { userId: user.id, courseId: course.id, isActive: true },
+      });
+
+      if (!enrollment) {
+        throw new ForbiddenException(
+          'You are not enrolled in this course. Please enroll to watch videos.',
+        );
+      }
+    }
+    // Any other case: deny
+    else {
       throw new ForbiddenException('Access denied');
     }
 
@@ -420,7 +496,7 @@ export class ModulesService {
 
   async getSheet(
     fileName: string,
-    user?: User,
+    user: User,
   ): Promise<{ filePath: string; mimeType: string }> {
     const sheet = await this.sheetRepository
       .createQueryBuilder('sheet')
@@ -433,20 +509,35 @@ export class ModulesService {
       throw new NotFoundException('Sheet not found');
     }
 
-    // Check if user has access to the sheet
-    if (
-      !sheet.module.course.isPublished &&
-      (!user ||
-        (![Role.SUPER_ADMIN, Role.ADMIN].includes(user.role) &&
-          (user.role !== Role.TEACHER ||
-            sheet.module.course.instructorId !== user.id)))
-    ) {
-      throw new ForbiddenException('Access denied');
-    }
+    const course = sheet.module.course;
 
-    // Check if sheet is downloadable for students
-    if (user && user.role === Role.STUDENT && !sheet.isDownloadable) {
-      throw new ForbiddenException('Download not allowed for this file');
+    // SUPER_ADMIN / ADMIN: always allowed
+    if ([Role.SUPER_ADMIN, Role.ADMIN].includes(user.role)) {
+      // pass through
+    }
+    // TEACHER: allowed for their own course
+    else if (user.role === Role.TEACHER && course.instructorId === user.id) {
+      // pass through
+    }
+    // STUDENT: must be enrolled + sheet must be downloadable
+    else if (user.role === Role.STUDENT) {
+      const enrollment = await this.enrollmentRepository.findOne({
+        where: { userId: user.id, courseId: course.id, isActive: true },
+      });
+
+      if (!enrollment) {
+        throw new ForbiddenException(
+          'You are not enrolled in this course. Please enroll to access study materials.',
+        );
+      }
+
+      if (!sheet.isDownloadable) {
+        throw new ForbiddenException('Download not allowed for this file');
+      }
+    }
+    // Any other case: deny
+    else {
+      throw new ForbiddenException('Access denied');
     }
 
     const filePath = path.join(process.cwd(), 'uploads', 'sheets', fileName);

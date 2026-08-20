@@ -250,6 +250,9 @@ export class FilesController {
   constructor(private readonly modulesService: ModulesService) {}
 
   @Get('videos/:fileName')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.TEACHER, Role.STUDENT)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Stream video file (supports HTTP Range requests for seeking)',
   })
@@ -267,8 +270,9 @@ export class FilesController {
     status: 206,
     description: 'Partial video content streamed successfully',
   })
+  @ApiResponse({ status: 401, description: 'Unauthorized - token required' })
+  @ApiResponse({ status: 403, description: 'Access denied - not enrolled' })
   @ApiResponse({ status: 404, description: 'Video not found' })
-  @ApiResponse({ status: 403, description: 'Access denied' })
   async streamVideo(
     @Param('fileName') fileName: string,
     @CurrentUser() user: User,
@@ -318,16 +322,20 @@ export class FilesController {
   }
 
   @Get('sheets/:fileName')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.TEACHER, Role.STUDENT)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Download sheet file' })
   @ApiParam({ name: 'fileName', description: 'Sheet file name' })
   @ApiResponse({
     status: 200,
     description: 'Sheet file downloaded successfully',
   })
+  @ApiResponse({ status: 401, description: 'Unauthorized - token required' })
   @ApiResponse({ status: 404, description: 'Sheet not found' })
   @ApiResponse({
     status: 403,
-    description: 'Download not allowed or access denied',
+    description: 'Download not allowed or not enrolled',
   })
   async downloadSheet(
     @Param('fileName') fileName: string,

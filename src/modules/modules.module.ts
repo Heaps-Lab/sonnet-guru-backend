@@ -7,11 +7,18 @@ import { Module as ModuleEntity } from './entities/module.entity';
 import { Video } from './entities/video.entity';
 import { ModuleSheet } from './entities/module-sheet.entity';
 import { Course } from '../courses/entities/course.entity';
+import { Enrollment } from '../payments/entities/enrollment.entity';
 import { memoryStorage } from 'multer';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ModuleEntity, Video, ModuleSheet, Course]),
+    TypeOrmModule.forFeature([
+      ModuleEntity,
+      Video,
+      ModuleSheet,
+      Course,
+      Enrollment,
+    ]),
     MulterModule.register({
       storage: memoryStorage(),
       limits: {

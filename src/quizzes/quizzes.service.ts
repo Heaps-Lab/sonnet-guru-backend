@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import {
   Injectable,
   NotFoundException,
@@ -130,6 +133,17 @@ export class QuizzesService {
       );
     }
 
+    // Enforce one quiz per module rule
+    const existingQuiz = await this.quizRepository.findOne({
+      where: { moduleId, isActive: true },
+    });
+
+    if (existingQuiz) {
+      throw new BadRequestException(
+        'A module can only have one quiz. This module already has a quiz.',
+      );
+    }
+
     const quiz = this.quizRepository.create({
       ...createQuizDto,
       moduleId,
@@ -170,9 +184,11 @@ export class QuizzesService {
     }
 
     return this.dataSource.transaction(async (manager) => {
-      // Create question
+      // Create question without options (to avoid cascade duplication)
+      const { options: _, ...questionData } = addQuestionDto;
+
       const question = manager.create(QuizQuestion, {
-        ...addQuestionDto,
+        ...questionData,
         quizId,
         marks: addQuestionDto.marks || 1,
         negativeMarking: addQuestionDto.negativeMarking || 0,
@@ -183,7 +199,7 @@ export class QuizzesService {
 
       const savedQuestion = await manager.save(QuizQuestion, question);
 
-      // Create options
+      // Create options separately
       const options = addQuestionDto.options.map((option) =>
         manager.create(QuestionOption, {
           ...option,
@@ -201,7 +217,7 @@ export class QuizzesService {
     });
   }
 
-  async findAll(moduleId: string, user?: User): Promise<Quiz[]> {
+  async findAll(moduleId: string, user: User): Promise<Quiz | null> {
     const module = await this.moduleRepository.findOne({
       where: { id: moduleId },
       relations: { course: true },
@@ -210,36 +226,51 @@ export class QuizzesService {
     if (!module) {
       throw new NotFoundException('Module not found');
     }
-
     // Check access permissions
     if (
       !module.course.isPublished &&
-      (!user ||
-        (![Role.SUPER_ADMIN, Role.ADMIN].includes(user.role) &&
-          (user.role !== Role.TEACHER ||
-            module.course.instructorId !== user.id)))
+      ![Role.SUPER_ADMIN, Role.ADMIN].includes(user.role) &&
+      (user.role !== Role.TEACHER || module.course.instructorId !== user.id)
     ) {
       throw new ForbiddenException('Module not accessible');
     }
 
     const queryBuilder = this.quizRepository
       .createQueryBuilder('quiz')
+      .leftJoinAndSelect('quiz.questions', 'questions')
+      .leftJoinAndSelect('questions.options', 'options')
       .where('quiz.moduleId = :moduleId', { moduleId })
-      .andWhere('quiz.isActive = :isActive', { isActive: true });
+      .andWhere('quiz.isActive = :isActive', { isActive: true })
+      .orderBy('questions.sequenceNumber', 'ASC')
+      .addOrderBy('options.optionIndex', 'ASC');
 
-    // Students only see published quizzes
-    if (!user || user.role === Role.STUDENT) {
+    // Students only see published quizzes, admins (SUPER_ADMIN, ADMIN, course instructor) see all quizzes
+    if (
+      user.role === Role.STUDENT ||
+      (user.role === Role.TEACHER && module.course.instructorId !== user.id)
+    ) {
       queryBuilder.andWhere('quiz.isPublished = :isPublished', {
         isPublished: true,
       });
     }
 
-    return queryBuilder.orderBy('quiz.createdAt', 'DESC').getMany();
+    // Since we enforce one quiz per module, return the single quiz or null
+    const quiz = await queryBuilder.getOne();
+
+    // Hide correct answers for students
+    if (quiz && user.role === Role.STUDENT) {
+      quiz.questions = quiz.questions.map((question) => {
+        const { correctOptionIndex, explanation, ...rest } = question;
+        return rest;
+      }) as QuizQuestion[];
+    }
+
+    return quiz;
   }
 
   async findOne(
     id: string,
-    user?: User,
+    user: User,
     includeAnswers: boolean = false,
   ): Promise<Quiz> {
     const queryBuilder = this.quizRepository
@@ -262,25 +293,29 @@ export class QuizzesService {
     // Check permissions
     if (
       !quiz.module.course.isPublished &&
-      (!user ||
-        (![Role.SUPER_ADMIN, Role.ADMIN].includes(user.role) &&
-          (user.role !== Role.TEACHER ||
-            quiz.module.course.instructorId !== user.id)))
+      ![Role.SUPER_ADMIN, Role.ADMIN].includes(user.role) &&
+      (user.role !== Role.TEACHER ||
+        quiz.module.course.instructorId !== user.id)
     ) {
       throw new ForbiddenException('Quiz not accessible');
     }
 
-    // Students only see published quizzes
-    if ((!user || user.role === Role.STUDENT) && !quiz.isPublished) {
+    // Students only see published quizzes, admins (SUPER_ADMIN, ADMIN, course instructor) can see unpublished quizzes
+    if (
+      (user.role === Role.STUDENT ||
+        (user.role === Role.TEACHER &&
+          quiz.module.course.instructorId !== user.id)) &&
+      !quiz.isPublished
+    ) {
       throw new NotFoundException('Quiz not found');
     }
 
     // Hide correct answers for students unless it's for review after submission
-    if (!includeAnswers && user && user.role === Role.STUDENT) {
+    if (!includeAnswers && user.role === Role.STUDENT) {
       quiz.questions = quiz.questions.map((question) => {
         const { correctOptionIndex, explanation, ...rest } = question;
-        return rest as any;
-      });
+        return rest;
+      }) as QuizQuestion[];
     }
 
     return quiz;

@@ -56,26 +56,39 @@ export class QuizzesController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.TEACHER, Role.STUDENT)
+  @ApiBearerAuth()
   @ApiParam({ name: 'moduleId', description: 'Module ID' })
-  @ApiOperation({ summary: 'Get all quizzes for a module' })
-  @ApiResponse({ status: 200, description: 'Quizzes retrieved successfully' })
+  @ApiOperation({ summary: 'Get the quiz for a module (one quiz per module)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Quiz retrieved successfully (null if no quiz exists)',
+  })
+  @ApiResponse({ status: 404, description: 'Module not found' })
+  @ApiResponse({ status: 403, description: 'Module not accessible' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - token required' })
   findAll(
     @Param('moduleId', ParseUUIDPipe) moduleId: string,
-    @CurrentUser() user?: User,
+    @CurrentUser() user: User,
   ) {
     return this.quizzesService.findAll(moduleId, user);
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.TEACHER, Role.STUDENT)
+  @ApiBearerAuth()
   @ApiParam({ name: 'moduleId', description: 'Module ID' })
   @ApiParam({ name: 'id', description: 'Quiz ID' })
   @ApiOperation({ summary: 'Get quiz by ID' })
   @ApiResponse({ status: 200, description: 'Quiz retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Quiz not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - token required' })
   findOne(
     @Param('moduleId', ParseUUIDPipe) moduleId: string,
     @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user?: User,
+    @CurrentUser() user: User,
   ) {
     return this.quizzesService.findOne(id, user);
   }

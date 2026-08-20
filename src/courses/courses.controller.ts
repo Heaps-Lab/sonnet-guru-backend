@@ -55,6 +55,9 @@ export class CoursesController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.TEACHER, Role.STUDENT)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get all courses' })
   @ApiResponse({ status: 200, description: 'Courses retrieved successfully' })
   findAll(@CurrentUser() user?: User) {
@@ -74,7 +77,23 @@ export class CoursesController {
     return this.coursesService.getMyCourses(user);
   }
 
+  @Get('enrolled')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.STUDENT)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get my enrolled courses (students only)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Enrolled courses retrieved successfully',
+  })
+  getEnrolledCourses(@CurrentUser() user: User) {
+    return this.coursesService.getEnrolledCourses(user);
+  }
+
   @Get(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.TEACHER, Role.STUDENT)
+  @ApiBearerAuth()
   @ApiParam({ name: 'id', description: 'Course ID' })
   @ApiOperation({ summary: 'Get course by ID' })
   @ApiResponse({ status: 200, description: 'Course retrieved successfully' })

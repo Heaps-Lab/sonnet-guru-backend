@@ -7,6 +7,9 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Course } from './entities/course.entity';
+import { Enrollment } from '../payments/entities/enrollment.entity';
+import { PaymentClaim } from '../payments/entities/payment-claim.entity';
+import { PaymentStatus } from '../common/enums/payment.enum';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
 import { User } from '../users/entities/user.entity';
@@ -22,6 +25,10 @@ export class CoursesService {
   constructor(
     @InjectRepository(Course)
     private courseRepository: Repository<Course>,
+    @InjectRepository(Enrollment)
+    private enrollmentRepository: Repository<Enrollment>,
+    @InjectRepository(PaymentClaim)
+    private paymentClaimRepository: Repository<PaymentClaim>,
   ) {}
 
   async create(createCourseDto: CreateCourseDto, user: User): Promise<Course> {
@@ -51,22 +58,20 @@ export class CoursesService {
       .leftJoinAndSelect('course.instructor', 'instructor')
       .where('course.isActive = :isActive', { isActive: true });
 
-    // If user is not admin/super admin, only show published courses
-    if (
-      !user ||
-      ![Role.SUPER_ADMIN, Role.ADMIN, Role.TEACHER].includes(user.role)
-    ) {
-      queryBuilder.andWhere('course.isPublished = :isPublished', {
-        isPublished: true,
-      });
-    }
-
-    // If user is teacher, only show their own courses (plus published ones)
-    if (user && user.role === Role.TEACHER) {
+    if (user && [Role.SUPER_ADMIN, Role.ADMIN].includes(user.role)) {
+      // return queryBuilder.orderBy('course.createdAt', 'DESC').getMany();
+      // Admin/Super Admin: see ALL courses regardless of publish status
+    } else if (user && user.role === Role.TEACHER) {
+      // Teacher: see their own courses (any status) + other published courses
       queryBuilder.andWhere(
         '(course.instructorId = :instructorId OR course.isPublished = :isPublished)',
         { instructorId: user.id, isPublished: true },
       );
+    } else {
+      // Students and unauthenticated: published only
+      queryBuilder.andWhere('course.isPublished = :isPublished', {
+        isPublished: true,
+      });
     }
 
     return queryBuilder.orderBy('course.createdAt', 'DESC').getMany();
@@ -81,10 +86,7 @@ export class CoursesService {
       .leftJoinAndSelect('modules.sheets', 'sheets')
       .leftJoinAndSelect('modules.quizzes', 'quizzes')
       .where('course.id = :id', { id })
-      .andWhere('course.isActive = :isActive', { isActive: true });
-
-    // Sort modules and videos by sequence
-    queryBuilder
+      .andWhere('course.isActive = :isActive', { isActive: true })
       .orderBy('modules.sequenceOrder', 'ASC')
       .addOrderBy('videos.sequenceNumber', 'ASC');
 
@@ -94,25 +96,40 @@ export class CoursesService {
       throw new NotFoundException('Course not found');
     }
 
-    // Check permissions
-    if (
-      !user ||
-      ![Role.SUPER_ADMIN, Role.ADMIN, Role.TEACHER].includes(user.role)
-    ) {
+    // SUPER_ADMIN and ADMIN: full access always
+    if (user && [Role.SUPER_ADMIN, Role.ADMIN].includes(user.role)) {
+      return course;
+    }
+
+    // TEACHER: full access to their own course, published access to others
+    if (user && user.role === Role.TEACHER) {
+      if (course.instructorId === user.id) {
+        return course;
+      }
       if (!course.isPublished) {
         throw new NotFoundException('Course not found');
       }
+      return course;
     }
 
-    if (
-      user &&
-      user.role === Role.TEACHER &&
-      course.instructorId !== user.id &&
-      !course.isPublished
-    ) {
-      throw new ForbiddenException(
-        'You do not have permission to view this course',
-      );
+    // STUDENT: must have an active enrollment for this course
+    if (user && user.role === Role.STUDENT) {
+      const enrollment = await this.enrollmentRepository.findOne({
+        where: { userId: user.id, courseId: id, isActive: true },
+      });
+
+      if (!enrollment) {
+        throw new ForbiddenException(
+          'You are not enrolled in this course. Please enroll to access the content.',
+        );
+      }
+
+      return course;
+    }
+
+    // Unauthenticated: only published courses
+    if (!course.isPublished) {
+      throw new NotFoundException('Course not found');
     }
 
     return course;
@@ -199,6 +216,66 @@ export class CoursesService {
       relations: { modules: true },
       order: { createdAt: 'DESC' },
     });
+  }
+
+  async getEnrolledCourses(user: User): Promise<any[]> {
+    if (user.role !== Role.STUDENT) {
+      throw new ForbiddenException('Only students can access this endpoint');
+    }
+
+    // 1. Fetch active enrollments (payment approved)
+    const enrollments = await this.enrollmentRepository.find({
+      where: { userId: user.id, isActive: true },
+      relations: {
+        course: {
+          instructor: true,
+          modules: {
+            videos: true,
+            sheets: true,
+            quizzes: true,
+          },
+        },
+      },
+      order: { enrolledAt: 'DESC' },
+    });
+
+    const enrolledCourses = enrollments.map((enrollment) => ({
+      ...enrollment.course,
+      enrollmentStatus: 'enrolled',
+      enrollmentId: enrollment.id,
+      enrolledAt: enrollment.enrolledAt,
+      progressPercentage: enrollment.progressPercentage,
+      completedAt: enrollment.completedAt,
+    }));
+
+    // 2. Fetch pending payment claims (payment submitted but not yet approved)
+    const pendingClaims = await this.paymentClaimRepository.find({
+      where: { userId: user.id, status: PaymentStatus.PENDING },
+      relations: {
+        course: {
+          instructor: true,
+        },
+      },
+      order: { createdAt: 'DESC' },
+    });
+
+    // Exclude courses already enrolled (in case of edge cases)
+    const enrolledCourseIds = new Set(enrolledCourses.map((c) => c.id));
+
+    const pendingCourses = pendingClaims
+      .filter((claim) => !enrolledCourseIds.has(claim.courseId))
+      .map((claim) => ({
+        ...claim.course,
+        enrollmentStatus: 'pending',
+        paymentClaimId: claim.id,
+        paymentGateway: claim.gateway,
+        amountPaid: claim.amountPaid,
+        transactionId: claim.transactionId,
+        claimSubmittedAt: claim.createdAt,
+      }));
+
+    // Return both groups together — frontend can filter by enrollmentStatus
+    return [...enrolledCourses, ...pendingCourses];
   }
 
   async uploadThumbnail(

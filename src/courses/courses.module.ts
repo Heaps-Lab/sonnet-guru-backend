@@ -5,10 +5,12 @@ import { memoryStorage } from 'multer';
 import { CoursesService } from './courses.service';
 import { CoursesController, ThumbnailsController } from './courses.controller';
 import { Course } from './entities/course.entity';
+import { Enrollment } from '../payments/entities/enrollment.entity';
+import { PaymentClaim } from '../payments/entities/payment-claim.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Course]),
+    TypeOrmModule.forFeature([Course, Enrollment, PaymentClaim]),
     MulterModule.register({
       storage: memoryStorage(),
       limits: {

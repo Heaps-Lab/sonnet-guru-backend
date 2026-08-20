@@ -4,10 +4,12 @@ import {
   PrimaryGeneratedColumn,
   ManyToOne,
   JoinColumn,
+  Unique,
 } from 'typeorm';
 import { QuizQuestion } from './quiz-question.entity';
 
 @Entity('question_options')
+@Unique(['questionId', 'optionIndex'])
 export class QuestionOption {
   @PrimaryGeneratedColumn('uuid')
   id: string;
