@@ -7,6 +7,7 @@ import { Module as ModuleEntity } from './entities/module.entity';
 import { Video } from './entities/video.entity';
 import { ModuleSheet } from './entities/module-sheet.entity';
 import { Course } from '../courses/entities/course.entity';
+import { Subject } from '../subjects/entities/subject.entity';
 import { Enrollment } from '../payments/entities/enrollment.entity';
 import { memoryStorage } from 'multer';
 
@@ -17,6 +18,7 @@ import { memoryStorage } from 'multer';
       Video,
       ModuleSheet,
       Course,
+      Subject,
       Enrollment,
     ]),
     MulterModule.register({

@@ -9,6 +9,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Course } from '../../courses/entities/course.entity';
+import { Subject } from '../../subjects/entities/subject.entity';
 import { Quiz } from '../../quizzes/entities/quiz.entity';
 import { Video } from './video.entity';
 import { ModuleSheet } from './module-sheet.entity';
@@ -19,6 +20,14 @@ export class Module {
   id: string;
 
   @Column({ type: 'uuid' })
+  subjectId: string;
+
+  @ManyToOne(() => Subject, (subject) => subject.modules)
+  @JoinColumn({ name: 'subjectId' })
+  subject: Subject;
+
+  // Keep course relationship for backward compatibility and easy access
+  @Column({ type: 'uuid', nullable: true })
   courseId: string;
 
   @ManyToOne(() => Course, (course) => course.modules)

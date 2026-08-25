@@ -1,9 +1,18 @@
-import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  HttpCode,
+  HttpStatus,
+  Get,
+  Query,
+} from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse as SwaggerResponse,
   ApiBody,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -123,5 +132,33 @@ export class AuthController {
   async login(@Body() loginDto: LoginDto) {
     const result = await this.authService.login(loginDto);
     return ApiResponse.success(result, 'Authentication verified successfully.');
+  }
+
+  @Get('verify-email')
+  @ApiOperation({ summary: 'Verify email address' })
+  @ApiQuery({ name: 'token', description: 'Email verification token' })
+  @SwaggerResponse({ status: 200, description: 'Email verified successfully' })
+  @SwaggerResponse({ status: 400, description: 'Invalid or expired token' })
+  async verifyEmail(@Query('token') token: string) {
+    return this.authService.verifyEmail(token);
+  }
+
+  @Post('resend-verification')
+  @ApiOperation({ summary: 'Resend verification email' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        email: { type: 'string', example: 'user@example.com' },
+      },
+    },
+  })
+  @SwaggerResponse({ status: 200, description: 'Verification email sent' })
+  @SwaggerResponse({
+    status: 400,
+    description: 'Email already verified or user not found',
+  })
+  async resendVerification(@Body('email') email: string) {
+    return this.authService.resendVerificationEmail(email);
   }
 }

@@ -65,4 +65,29 @@ export class UsersService {
       },
     });
   }
+
+  async updateVerificationToken(
+    userId: string,
+    token: string,
+    expiry: Date,
+  ): Promise<void> {
+    await this.userRepository.update(userId, {
+      emailVerificationToken: token,
+      emailVerificationTokenExpiry: expiry,
+    });
+  }
+
+  async findByVerificationToken(token: string) {
+    return await this.userRepository.findOne({
+      where: { emailVerificationToken: token },
+    });
+  }
+
+  async verifyEmail(userId: string): Promise<void> {
+    await this.userRepository.update(userId, {
+      isEmailVerified: true,
+      emailVerificationToken: null,
+      emailVerificationTokenExpiry: null,
+    });
+  }
 }

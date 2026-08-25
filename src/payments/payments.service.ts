@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import {
   Injectable,
   NotFoundException,
@@ -82,10 +84,19 @@ export class PaymentsService {
       throw new ConflictException('Transaction ID already exists');
     }
 
-    // Validate amount matches course price
-    if (createPaymentClaimDto.amountPaid < course.price) {
+    // Validate amount matches course price (use discounted price if available)
+    const effectivePrice =
+      course.discount > 0 && course.discountedPrice
+        ? course.discountedPrice
+        : course.price;
+
+    if (createPaymentClaimDto.amountPaid < effectivePrice) {
       throw new BadRequestException(
-        `Payment amount is insufficient. Course price: ${course.price} BDT`,
+        `Payment amount is insufficient. Course price: ${effectivePrice} BDT ${
+          course.discount > 0
+            ? `(${course.discount}% discount applied, original price: ${course.price} BDT)`
+            : ''
+        }`,
       );
     }
 
@@ -167,7 +178,12 @@ export class PaymentsService {
       // Return updated claim
       const updatedClaim = await manager.findOne(PaymentClaim, {
         where: { id: claimId },
-        relations: { user: true, course: true, verifier: true, enrollment: true },
+        relations: {
+          user: true,
+          course: true,
+          verifier: true,
+          enrollment: true,
+        },
       });
 
       if (!updatedClaim) {

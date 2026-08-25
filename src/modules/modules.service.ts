@@ -10,6 +10,7 @@ import { Module } from './entities/module.entity';
 import { Video } from './entities/video.entity';
 import { ModuleSheet } from './entities/module-sheet.entity';
 import { Course } from '../courses/entities/course.entity';
+import { Subject } from '../subjects/entities/subject.entity';
 import { Enrollment } from '../payments/entities/enrollment.entity';
 import { CreateModuleDto } from './dto/create-module.dto';
 import { UpdateModuleDto } from './dto/update-module.dto';
@@ -18,6 +19,7 @@ import { UploadSheetDto } from './dto/upload-sheet.dto';
 import { CompleteModuleDto } from './dto/complete-module.dto';
 import { User } from '../users/entities/user.entity';
 import { Role } from '../common/enums/role.enum';
+import { PaymentStatus } from '../common/enums/payment.enum';
 import * as fs from 'fs';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
@@ -33,23 +35,27 @@ export class ModulesService {
     private sheetRepository: Repository<ModuleSheet>,
     @InjectRepository(Course)
     private courseRepository: Repository<Course>,
+    @InjectRepository(Subject)
+    private subjectRepository: Repository<Subject>,
     @InjectRepository(Enrollment)
     private enrollmentRepository: Repository<Enrollment>,
     private dataSource: DataSource,
   ) {}
 
-  async create(
-    courseId: string,
-    createModuleDto: CreateModuleDto,
-    user: User,
-  ): Promise<Module> {
-    // Verify course exists and user has permission
-    const course = await this.courseRepository.findOne({
-      where: { id: courseId, isActive: true },
+  async create(createModuleDto: CreateModuleDto, user: User): Promise<Module> {
+    // Verify subject exists and get course info
+    const subject = await this.subjectRepository.findOne({
+      where: { id: createModuleDto.subjectId, isActive: true },
+      relations: { course: true },
     });
 
-    if (!course) {
-      throw new NotFoundException('Course not found');
+    if (!subject) {
+      throw new NotFoundException('Subject not found');
+    }
+
+    const course = subject.course;
+    if (!course || !course.isActive) {
+      throw new NotFoundException('Course not found or inactive');
     }
 
     // Check permissions
@@ -58,23 +64,48 @@ export class ModulesService {
       (user.role !== Role.TEACHER || course.instructorId !== user.id)
     ) {
       throw new ForbiddenException(
-        'You do not have permission to create modules for this course',
+        'You do not have permission to create modules for this subject',
+      );
+    }
+
+    // Check if sequence order already exists for this subject
+    const existingModule = await this.moduleRepository.findOne({
+      where: {
+        subjectId: createModuleDto.subjectId,
+        sequenceOrder: createModuleDto.sequenceOrder,
+      },
+    });
+
+    if (existingModule) {
+      throw new BadRequestException(
+        `Module with sequence order ${createModuleDto.sequenceOrder} already exists for this subject`,
       );
     }
 
     const module = this.moduleRepository.create({
       ...createModuleDto,
-      courseId,
+      courseId: createModuleDto.courseId || course.id, // Set courseId for backward compatibility
     });
 
-    return this.moduleRepository.save(module);
+    const savedModule = await this.moduleRepository.save(module);
+
+    // Update subject stats
+    await this.updateSubjectStats(createModuleDto.subjectId);
+
+    return savedModule;
   }
 
-  async findAll(courseId: string, user?: User): Promise<Module[]> {
-    const course = await this.courseRepository.findOne({
-      where: { id: courseId, isActive: true },
+  async findAll(subjectId: string, user?: User): Promise<Module[]> {
+    const subject = await this.subjectRepository.findOne({
+      where: { id: subjectId, isActive: true },
+      relations: { course: true },
     });
 
+    if (!subject) {
+      throw new NotFoundException('Subject not found');
+    }
+
+    const course = subject.course;
     if (!course) {
       throw new NotFoundException('Course not found');
     }
@@ -85,7 +116,8 @@ export class ModulesService {
         .createQueryBuilder('module')
         .leftJoinAndSelect('module.videos', 'videos')
         .leftJoinAndSelect('module.sheets', 'sheets')
-        .where('module.courseId = :courseId', { courseId })
+        .leftJoinAndSelect('module.quizzes', 'quizzes')
+        .where('module.subjectId = :subjectId', { subjectId })
         .orderBy('module.sequenceOrder', 'ASC')
         .addOrderBy('videos.sequenceNumber', 'ASC')
         .getMany();
@@ -97,7 +129,8 @@ export class ModulesService {
         .createQueryBuilder('module')
         .leftJoinAndSelect('module.videos', 'videos')
         .leftJoinAndSelect('module.sheets', 'sheets')
-        .where('module.courseId = :courseId', { courseId })
+        .leftJoinAndSelect('module.quizzes', 'quizzes')
+        .where('module.subjectId = :subjectId', { subjectId })
         .orderBy('module.sequenceOrder', 'ASC')
         .addOrderBy('videos.sequenceNumber', 'ASC')
         .getMany();
@@ -106,7 +139,7 @@ export class ModulesService {
     // STUDENT: must be enrolled
     if (user && user.role === Role.STUDENT) {
       const enrollment = await this.enrollmentRepository.findOne({
-        where: { userId: user.id, courseId, isActive: true },
+        where: { userId: user.id, courseId: course.id, isActive: true },
       });
 
       if (!enrollment) {
@@ -119,7 +152,9 @@ export class ModulesService {
         .createQueryBuilder('module')
         .leftJoinAndSelect('module.videos', 'videos')
         .leftJoinAndSelect('module.sheets', 'sheets')
-        .where('module.courseId = :courseId', { courseId })
+        .leftJoinAndSelect('module.quizzes', 'quizzes')
+        .where('module.subjectId = :subjectId', { subjectId })
+        .andWhere('module.isPublished = :isPublished', { isPublished: true })
         .orderBy('module.sequenceOrder', 'ASC')
         .addOrderBy('videos.sequenceNumber', 'ASC')
         .getMany();
@@ -134,7 +169,8 @@ export class ModulesService {
       .createQueryBuilder('module')
       .leftJoinAndSelect('module.videos', 'videos')
       .leftJoinAndSelect('module.sheets', 'sheets')
-      .where('module.courseId = :courseId', { courseId })
+      .leftJoinAndSelect('module.quizzes', 'quizzes')
+      .where('module.subjectId = :subjectId', { subjectId })
       .andWhere('module.isPublished = :isPublished', { isPublished: true })
       .orderBy('module.sequenceOrder', 'ASC')
       .addOrderBy('videos.sequenceNumber', 'ASC')
@@ -145,6 +181,7 @@ export class ModulesService {
     const module = await this.moduleRepository
       .createQueryBuilder('module')
       .leftJoinAndSelect('module.course', 'course')
+      .leftJoinAndSelect('module.subject', 'subject')
       .leftJoinAndSelect('module.videos', 'videos')
       .leftJoinAndSelect('module.sheets', 'sheets')
       .leftJoinAndSelect('module.quizzes', 'quizzes')
@@ -182,11 +219,16 @@ export class ModulesService {
         );
       }
 
+      // Check if module is published for students
+      if (!module.isPublished) {
+        throw new NotFoundException('Module not found');
+      }
+
       return module;
     }
 
-    // Unauthenticated / others: course must be published
-    if (!module.course.isPublished) {
+    // Unauthenticated / others: course must be published and module must be published
+    if (!module.course.isPublished || !module.isPublished) {
       throw new ForbiddenException('Module not accessible');
     }
 
@@ -304,6 +346,11 @@ export class ModulesService {
       );
     }
 
+    // Debug logging
+    console.log('Upload Sheet DTO:', uploadSheetDto);
+    console.log('isDownloadable value:', uploadSheetDto.isDownloadable);
+    console.log('isDownloadable type:', typeof uploadSheetDto.isDownloadable);
+
     // Generate unique filename
     const fileExtension = path.extname(file.originalname);
     const fileName = `${uuidv4()}${fileExtension}`;
@@ -319,9 +366,18 @@ export class ModulesService {
     // Save file to disk
     fs.writeFileSync(filePath, file.buffer);
 
+    // Ensure isDownloadable defaults to true if not provided
+    const isDownloadable =
+      uploadSheetDto.isDownloadable !== undefined
+        ? uploadSheetDto.isDownloadable
+        : true;
+
+    console.log('Final isDownloadable value:', isDownloadable);
+
     // Create sheet record
     const sheet = this.sheetRepository.create({
       ...uploadSheetDto,
+      isDownloadable, // Explicitly set it
       moduleId,
       fileName,
       fileUrl: `/api/v1/sheets/${fileName}`,
@@ -360,7 +416,29 @@ export class ModulesService {
       isPublished: completeModuleDto.isCompleted, // Auto-publish when completed
     });
 
+    // Update subject stats if module belongs to a subject
+    if (module.subjectId) {
+      await this.updateSubjectStats(module.subjectId);
+    }
+
     return this.findOne(id, user);
+  }
+
+  private async updateSubjectStats(subjectId: string): Promise<void> {
+    const modules = await this.moduleRepository.find({
+      where: { subjectId },
+    });
+
+    const totalModules = modules.length;
+    const totalDuration = modules.reduce(
+      (sum, module) => sum + (module.totalDuration || 0),
+      0,
+    );
+
+    await this.subjectRepository.update(subjectId, {
+      totalModules,
+      totalDuration,
+    });
   }
 
   async deleteVideo(videoId: string, user: User): Promise<void> {
@@ -468,15 +546,26 @@ export class ModulesService {
     else if (user.role === Role.TEACHER && course.instructorId === user.id) {
       // pass through
     }
-    // STUDENT: must be enrolled
+    // STUDENT: must be enrolled with APPROVED payment
     else if (user.role === Role.STUDENT) {
       const enrollment = await this.enrollmentRepository.findOne({
         where: { userId: user.id, courseId: course.id, isActive: true },
+        relations: { paymentClaim: true },
       });
 
       if (!enrollment) {
         throw new ForbiddenException(
           'You are not enrolled in this course. Please enroll to watch videos.',
+        );
+      }
+
+      // Check if payment claim is approved
+      if (
+        !enrollment.paymentClaim ||
+        enrollment.paymentClaim.status !== PaymentStatus.APPROVED
+      ) {
+        throw new ForbiddenException(
+          'Your payment is still pending approval. Please wait for admin verification to access course content.',
         );
       }
     }
@@ -523,11 +612,22 @@ export class ModulesService {
     else if (user.role === Role.STUDENT) {
       const enrollment = await this.enrollmentRepository.findOne({
         where: { userId: user.id, courseId: course.id, isActive: true },
+        relations: { paymentClaim: true },
       });
 
       if (!enrollment) {
         throw new ForbiddenException(
           'You are not enrolled in this course. Please enroll to access study materials.',
+        );
+      }
+
+      // Check if payment claim is approved
+      if (
+        !enrollment.paymentClaim ||
+        enrollment.paymentClaim.status !== PaymentStatus.APPROVED
+      ) {
+        throw new ForbiddenException(
+          'Your payment is still pending approval. Please wait for admin verification to access course content.',
         );
       }
 

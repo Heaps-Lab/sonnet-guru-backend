@@ -36,6 +36,15 @@ export class User {
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
+  @Column({ type: 'boolean', default: false })
+  isEmailVerified: boolean;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  emailVerificationToken: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  emailVerificationTokenExpiry: Date | null;
+
   @Column({ type: 'json', nullable: true })
   activeSessions: {
     deviceId: string;

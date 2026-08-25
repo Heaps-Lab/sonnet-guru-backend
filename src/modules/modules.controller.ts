@@ -48,7 +48,10 @@ export class ModulesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.TEACHER)
   @ApiBearerAuth()
-  @ApiParam({ name: 'courseId', description: 'Course ID' })
+  @ApiParam({
+    name: 'courseId',
+    description: 'Course ID (for route compatibility)',
+  })
   @ApiOperation({ summary: 'Create a new module' })
   @ApiResponse({ status: 201, description: 'Module created successfully' })
   @ApiResponse({
@@ -60,18 +63,27 @@ export class ModulesController {
     @Body() createModuleDto: CreateModuleDto,
     @CurrentUser() user: User,
   ) {
-    return this.modulesService.create(courseId, createModuleDto, user);
+    return this.modulesService.create(createModuleDto, user);
   }
 
   @Get()
-  @ApiParam({ name: 'courseId', description: 'Course ID' })
-  @ApiOperation({ summary: 'Get all modules for a course' })
+  @ApiParam({
+    name: 'courseId',
+    description: 'Course ID (deprecated - modules now belong to subjects)',
+  })
+  @ApiOperation({
+    summary: 'Get all modules - Use /subjects/:subjectId/modules instead',
+  })
   @ApiResponse({ status: 200, description: 'Modules retrieved successfully' })
   findAll(
     @Param('courseId', ParseUUIDPipe) courseId: string,
     @CurrentUser() user?: User,
   ) {
-    return this.modulesService.findAll(courseId, user);
+    // This endpoint is kept for backward compatibility
+    // but should be deprecated in favor of /subjects/:subjectId/modules
+    throw new Error(
+      'Please use GET /subjects/:subjectId to get modules by subject',
+    );
   }
 
   @Get(':id')

@@ -8,9 +8,11 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { CoursesModule } from './courses/courses.module';
+import { SubjectsModule } from './subjects/subjects.module';
 import { ModulesModule } from './modules/modules.module';
 import { QuizzesModule } from './quizzes/quizzes.module';
 import { PaymentsModule } from './payments/payments.module';
+import { TeacherApplicationsModule } from './teacher-applications/teacher-applications.module';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
@@ -57,9 +59,11 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     AuthModule,
     UsersModule,
     CoursesModule,
+    SubjectsModule,
     ModulesModule,
     QuizzesModule,
     PaymentsModule,
+    TeacherApplicationsModule,
   ],
   controllers: [AppController],
   providers: [

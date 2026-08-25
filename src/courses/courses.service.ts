@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import {
   Injectable,
   NotFoundException,
@@ -39,11 +40,27 @@ export class CoursesService {
       );
     }
 
+    // Validate discount percentage
+    if (createCourseDto.discount !== undefined) {
+      if (createCourseDto.discount < 0 || createCourseDto.discount > 100) {
+        throw new BadRequestException('Discount must be between 0 and 100');
+      }
+    }
+
+    // Calculate discounted price
+    const discount = createCourseDto.discount || 0;
+    const discountedPrice = this.calculateDiscountedPrice(
+      createCourseDto.price,
+      discount,
+    );
+
     const course = this.courseRepository.create({
       ...createCourseDto,
       instructorId: user.id,
       isPublished: createCourseDto.isPublished || false,
       isActive: true,
+      discount,
+      discountedPrice,
     });
 
     return this.courseRepository.save(course);
@@ -81,13 +98,20 @@ export class CoursesService {
     const queryBuilder = this.courseRepository
       .createQueryBuilder('course')
       .leftJoinAndSelect('course.instructor', 'instructor')
-      .leftJoinAndSelect('course.modules', 'modules')
+      .leftJoinAndSelect(
+        'course.subjects',
+        'subjects',
+        'subjects.isActive = :subjectActive',
+        { subjectActive: true },
+      )
+      .leftJoinAndSelect('subjects.modules', 'modules')
       .leftJoinAndSelect('modules.videos', 'videos')
       .leftJoinAndSelect('modules.sheets', 'sheets')
       .leftJoinAndSelect('modules.quizzes', 'quizzes')
       .where('course.id = :id', { id })
       .andWhere('course.isActive = :isActive', { isActive: true })
-      .orderBy('modules.sequenceOrder', 'ASC')
+      .orderBy('subjects.sequenceOrder', 'ASC')
+      .addOrderBy('modules.sequenceOrder', 'ASC')
       .addOrderBy('videos.sequenceNumber', 'ASC');
 
     const course = await queryBuilder.getOne();
@@ -109,21 +133,13 @@ export class CoursesService {
       if (!course.isPublished) {
         throw new NotFoundException('Course not found');
       }
-      return course;
-    }
-
-    // STUDENT: must have an active enrollment for this course
-    if (user && user.role === Role.STUDENT) {
-      const enrollment = await this.enrollmentRepository.findOne({
-        where: { userId: user.id, courseId: id, isActive: true },
-      });
-
-      if (!enrollment) {
-        throw new ForbiddenException(
-          'You are not enrolled in this course. Please enroll to access the content.',
-        );
-      }
-
+      // Filter only published modules for other teachers viewing
+      course.subjects =
+        course.subjects?.map((subject) => ({
+          ...subject,
+          modules:
+            subject.modules?.filter((module) => module.isPublished) || [],
+        })) || [];
       return course;
     }
 
@@ -131,6 +147,13 @@ export class CoursesService {
     if (!course.isPublished) {
       throw new NotFoundException('Course not found');
     }
+
+    // Filter only published modules for unauthenticated users
+    course.subjects =
+      course.subjects?.map((subject) => ({
+        ...subject,
+        modules: subject.modules?.filter((module) => module.isPublished) || [],
+      })) || [];
 
     return course;
   }
@@ -152,7 +175,29 @@ export class CoursesService {
       );
     }
 
-    await this.courseRepository.update(id, updateCourseDto);
+    // Validate discount if provided
+    if (updateCourseDto.discount !== undefined) {
+      if (updateCourseDto.discount < 0 || updateCourseDto.discount > 100) {
+        throw new BadRequestException('Discount must be between 0 and 100');
+      }
+    }
+
+    // Calculate new discounted price if price or discount changed
+    let discountedPrice = course.discountedPrice;
+    const newPrice = updateCourseDto.price ?? course.price;
+    const newDiscount = updateCourseDto.discount ?? course.discount;
+
+    if (
+      updateCourseDto.price !== undefined ||
+      updateCourseDto.discount !== undefined
+    ) {
+      discountedPrice = this.calculateDiscountedPrice(newPrice, newDiscount);
+    }
+
+    await this.courseRepository.update(id, {
+      ...updateCourseDto,
+      discountedPrice,
+    });
     return this.findOne(id, user);
   }
 
@@ -213,8 +258,20 @@ export class CoursesService {
 
     return this.courseRepository.find({
       where: { instructorId: user.id, isActive: true },
-      relations: { modules: true },
-      order: { createdAt: 'DESC' },
+      relations: {
+        subjects: {
+          modules: true,
+        },
+      },
+      order: {
+        createdAt: 'DESC',
+        subjects: {
+          sequenceOrder: 'ASC',
+          modules: {
+            sequenceOrder: 'ASC',
+          },
+        },
+      },
     });
   }
 
@@ -229,10 +286,12 @@ export class CoursesService {
       relations: {
         course: {
           instructor: true,
-          modules: {
-            videos: true,
-            sheets: true,
-            quizzes: true,
+          subjects: {
+            modules: {
+              videos: true,
+              sheets: true,
+              quizzes: true,
+            },
           },
         },
       },
@@ -338,6 +397,79 @@ export class CoursesService {
     await this.courseRepository.update(id, { thumbnailUrl });
 
     return this.findOne(id, user);
+  }
+
+  async getCourseStructure(id: string, user?: User): Promise<any> {
+    const course = await this.findOne(id, user);
+
+    // Transform the data to provide a cleaner structure
+    const structure = {
+      id: course.id,
+      title: course.title,
+      description: course.description,
+      fullDescription: course.fullDescription,
+      instructor: course.instructor,
+      price: course.price,
+      isPublished: course.isPublished,
+      thumbnailUrl: course.thumbnailUrl,
+      category: course.category,
+      level: course.level,
+      totalDuration: course.totalDuration,
+      enrollmentCount: course.enrollmentCount,
+      createdAt: course.createdAt,
+      updatedAt: course.updatedAt,
+      subjects:
+        course.subjects?.map((subject) => ({
+          id: subject.id,
+          name: subject.name,
+          description: subject.description,
+          sequenceOrder: subject.sequenceOrder,
+          thumbnailUrl: subject.thumbnailUrl,
+          totalModules: subject.totalModules,
+          totalDuration: subject.totalDuration,
+          modules:
+            subject.modules?.map((module) => ({
+              id: module.id,
+              title: module.title,
+              description: module.description,
+              sequenceOrder: module.sequenceOrder,
+              isPublished: module.isPublished,
+              isCompleted: module.isCompleted,
+              totalDuration: module.totalDuration,
+              videosCount: module.videos?.length || 0,
+              sheetsCount: module.sheets?.length || 0,
+              quizzesCount: module.quizzes?.length || 0,
+              videos: module.videos,
+              sheets: module.sheets,
+              quizzes: module.quizzes,
+            })) || [],
+        })) || [],
+    };
+
+    return structure;
+  }
+
+  private calculateDiscountedPrice(price: number, discount: number): number {
+    if (discount <= 0) {
+      return price;
+    }
+    const discountAmount = (price * discount) / 100;
+    return Number((price - discountAmount).toFixed(2));
+  }
+
+  async getEffectivePrice(courseId: string): Promise<number> {
+    const course = await this.courseRepository.findOne({
+      where: { id: courseId, isActive: true },
+    });
+
+    if (!course) {
+      throw new NotFoundException('Course not found');
+    }
+
+    // Return discounted price if discount exists, otherwise return original price
+    return course.discount > 0 && course.discountedPrice
+      ? course.discountedPrice
+      : course.price;
   }
 
   getThumbnail(fileName: string): { filePath: string; mimeType: string } {

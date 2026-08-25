@@ -4,7 +4,6 @@ import {
   IsNumber,
   IsOptional,
   IsBoolean,
-  IsUUID,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -44,12 +43,30 @@ export class CreateCourseDto {
   price: number;
 
   @ApiPropertyOptional({
+    description: 'Discount percentage (0-100)',
+    example: 10,
+    minimum: 0,
+    maximum: 100,
+  })
+  @IsNumber()
+  @IsOptional()
+  discount?: number;
+
+  @ApiPropertyOptional({
     description: 'Course thumbnail URL',
     example: 'https://cdn.example.com/thumbnails/nestjs-course.jpg',
   })
   @IsString()
   @IsOptional()
   thumbnailUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'Introduction video URL (MP4 or any video link for preview)',
+    example: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+  })
+  @IsString()
+  @IsOptional()
+  introLink?: string;
 
   @ApiPropertyOptional({
     description: 'Course category',
@@ -67,6 +84,15 @@ export class CreateCourseDto {
   @IsString()
   @IsOptional()
   level?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Total duration in minutes (optional, auto-calculated from modules)',
+    example: 360,
+  })
+  @IsNumber()
+  @IsOptional()
+  totalDuration?: number;
 
   @ApiPropertyOptional({
     description: 'Whether the course is published and visible to students',
