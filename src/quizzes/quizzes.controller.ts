@@ -5,6 +5,7 @@ import {
   Body,
   Patch,
   Param,
+  Delete,
   UseGuards,
   ParseUUIDPipe,
 } from '@nestjs/common';
@@ -213,6 +214,139 @@ export class QuizzesController {
     @CurrentUser() user: User,
   ) {
     return this.quizzesService.getMySubmissions(quizId, user);
+  }
+}
+
+// Separate controller for quiz questions management
+@ApiTags('Quiz Questions')
+@Controller('quiz/questions')
+export class QuizQuestionsController {
+  constructor(private readonly quizzesService: QuizzesService) {}
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.TEACHER)
+  @ApiBearerAuth()
+  @ApiParam({ name: 'id', description: 'Question ID' })
+  @ApiOperation({
+    summary: 'Delete quiz question and its options (soft delete)',
+    description:
+      'Soft deletes a quiz question and all its options. Cannot delete from published quizzes.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Question deleted successfully',
+    schema: {
+      example: {
+        message: 'Question and its options deleted successfully',
+        deletedQuestion: {
+          id: '61cb6d14-523e-4e5e-8505-f1321eee2411',
+          questionText: 'What is the capital of France?',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad request - cannot delete from published quiz',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - insufficient permissions',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Question not found or already deleted',
+  })
+  deleteQuestion(
+    @Param('id', ParseUUIDPipe) questionId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.quizzesService.deleteQuestion(questionId, user);
+  }
+
+  @Patch(':id/restore')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.TEACHER)
+  @ApiBearerAuth()
+  @ApiParam({ name: 'id', description: 'Question ID' })
+  @ApiOperation({
+    summary: 'Restore deleted quiz question',
+    description: 'Restores a soft-deleted quiz question and all its options.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Question restored successfully',
+    schema: {
+      example: {
+        message: 'Question and its options restored successfully',
+        restoredQuestion: {
+          id: '61cb6d14-523e-4e5e-8505-f1321eee2411',
+          questionText: 'What is the capital of France?',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Bad request - question is already active or cannot restore in published quiz',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - insufficient permissions',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Question not found',
+  })
+  restoreQuestion(
+    @Param('id', ParseUUIDPipe) questionId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.quizzesService.restoreQuestion(questionId, user);
+  }
+
+  @Delete(':id/permanent')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiParam({ name: 'id', description: 'Question ID' })
+  @ApiOperation({
+    summary: 'Permanently delete quiz question (Super Admin only)',
+    description:
+      'Permanently deletes a quiz question and all its options from the database. This action cannot be undone.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Question permanently deleted',
+    schema: {
+      example: {
+        message: 'Question and its options permanently deleted',
+        deletedQuestion: {
+          id: '61cb6d14-523e-4e5e-8505-f1321eee2411',
+          questionText: 'What is the capital of France?',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad request - cannot delete from published quiz',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - only super administrators can permanently delete',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Question not found',
+  })
+  permanentDeleteQuestion(
+    @Param('id', ParseUUIDPipe) questionId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.quizzesService.permanentDeleteQuestion(questionId, user);
   }
 }
 

@@ -1,0 +1,255 @@
+version: '3.8'
+
+services:
+  # Redis Cache for OTP and sessions
+  redis:
+    image: redis:7.2-alpine
+    container_name: sonnet_redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --requirepass 'Redis@2024!Secure'
+    ports:
+      - '127.0.0.1:6379:6379'
+    volumes:
+      - redis_data:/data
+    networks:
+      - sonnet_network
+    mem_limit: 600m
+    mem_reservation: 256m
+    cpus: 0.5
+    healthcheck:
+      test: ['CMD', 'redis-cli', '--raw', 'incr', 'ping']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # MySQL Database with optimized settings
+  mysql:
+    image: mysql:8.0-debian
+    container_name: sonnet_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: '?D#+D6WJjI4]A^1o'
+      MYSQL_DATABASE: serversonnetguru_LMS
+      MYSQL_USER: serversonnetguru_LMS
+      MYSQL_PASSWORD: '?D#+D6WJjI4]A^1o'
+      TZ: UTC
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql-config/my.cnf:/etc/mysql/conf.d/custom.cnf:ro
+      - ./src/DB_BACKUP.sql:/docker-entrypoint-initdb.d/01-restore.sql:ro
+    networks:
+      - sonnet_network
+    ports:
+      - '127.0.0.1:3307:3306'
+    command: >
+      --innodb-buffer-pool-size=1G
+      --max-connections=100
+      --innodb-redo-log-capacity=536870912
+      --innodb-flush-log-at-trx-commit=2
+      --innodb-file-per-table=1
+    mem_limit: 1.5g
+    mem_reservation: 1g
+    cpus: 1.5
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
+      timeout: 20s
+      retries: 10
+
+  # Application instances
+  app1:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: sonnet_app1
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: serversonnetguru_LMS
+      DB_USERNAME: root
+      DB_PASSWORD: '?D#+D6WJjI4]A^1o'
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: 'Redis@2024!Secure'
+      JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
+      EMAIL_HOST: smtp.gmail.com
+      EMAIL_PORT: 587
+      EMAIL_USER: sonnetguruedu@gmail.com
+      EMAIL_PASSWORD: 'wprj bzyx aqun mgeb'
+      MAIL_HOST: smtp.gmail.com
+      MAIL_PORT: 587
+      MAIL_USER: sonnetguruedu@gmail.com
+      MAIL_PASSWORD: 'wprj bzyx aqun mgeb'
+      MAIL_FROM: sonnetguruedu@gmail.com
+      FRONTEND_URL: https://server.sonnetguru.com
+      ADMIN_EMAIL: sonnetguruedu@gmail.com
+      TZ: UTC
+    volumes:
+      - app_uploads:/app/uploads
+    networks:
+      - sonnet_network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    mem_limit: 1g
+    mem_reservation: 500m
+    cpus: 1.0
+
+  app2:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: sonnet_app2
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: serversonnetguru_LMS
+      DB_USERNAME: root
+      DB_PASSWORD: '?D#+D6WJjI4]A^1o'
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: 'Redis@2024!Secure'
+      JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
+      EMAIL_HOST: smtp.gmail.com
+      EMAIL_PORT: 587
+      EMAIL_USER: sonnetguruedu@gmail.com
+      EMAIL_PASSWORD: 'wprj bzyx aqun mgeb'
+      MAIL_HOST: smtp.gmail.com
+      MAIL_PORT: 587
+      MAIL_USER: sonnetguruedu@gmail.com
+      MAIL_PASSWORD: 'wprj bzyx aqun mgeb'
+      MAIL_FROM: sonnetguruedu@gmail.com
+      FRONTEND_URL: https://server.sonnetguru.com
+      ADMIN_EMAIL: sonnetguruedu@gmail.com
+      TZ: UTC
+    volumes:
+      - app_uploads:/app/uploads
+    networks:
+      - sonnet_network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    mem_limit: 1g
+    mem_reservation: 500m
+    cpus: 1.0
+
+  app3:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: sonnet_app3
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: serversonnetguru_LMS
+      DB_USERNAME: root
+      DB_PASSWORD: '?D#+D6WJjI4]A^1o'
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: 'Redis@2024!Secure'
+      JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
+      EMAIL_HOST: smtp.gmail.com
+      EMAIL_PORT: 587
+      EMAIL_USER: sonnetguruedu@gmail.com
+      EMAIL_PASSWORD: 'wprj bzyx aqun mgeb'
+      MAIL_HOST: smtp.gmail.com
+      MAIL_PORT: 587
+      MAIL_USER: sonnetguruedu@gmail.com
+      MAIL_PASSWORD: 'wprj bzyx aqun mgeb'
+      MAIL_FROM: sonnetguruedu@gmail.com
+      FRONTEND_URL: https://server.sonnetguru.com
+      ADMIN_EMAIL: sonnetguruedu@gmail.com
+      TZ: UTC
+    volumes:
+      - app_uploads:/app/uploads
+    networks:
+      - sonnet_network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    mem_limit: 1g
+    mem_reservation: 500m
+    cpus: 1.0
+
+  # Nginx Load Balancer
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    container_name: sonnet_nginx
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - app_uploads:/var/www/uploads:ro
+      - nginx_logs:/var/log/nginx
+    networks:
+      - sonnet_network
+    depends_on:
+      - app1
+      - app2
+      - app3
+    mem_limit: 200m
+    cpus: 0.5
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '--quiet',
+          '--tries=1',
+          '--spider',
+          'http://localhost/health',
+        ]
+      timeout: 10s
+      retries: 3
+
+  # Certbot for SSL renewal
+  certbot:
+    image: certbot/certbot:latest
+    container_name: sonnet_certbot
+    restart: unless-stopped
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt
+      - /var/lib/letsencrypt:/var/lib/letsencrypt
+    networks:
+      - sonnet_network
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --quiet; sleep 12h & wait $${!}; done;'"
+
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+  app_uploads:
+    driver: local
+  nginx_logs:
+    driver: local
+
+networks:
+  sonnet_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

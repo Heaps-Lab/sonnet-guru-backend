@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import {
   Controller,
   Get,
@@ -299,24 +300,41 @@ export class FilesController {
     const { size } = statSync(filePath);
     const range = req.headers.range;
 
-    // No Range header: fall back to a full response but still advertise
-    // range support so video players know they can seek.
+    // Memory optimization: Set smaller default chunk size for better memory usage
+    const DEFAULT_CHUNK_SIZE = 1024 * 1024; // 1MB chunks instead of full file
+
+    // No Range header: provide chunked streaming instead of full file
     if (!range) {
       res.set({
         'Content-Type': mimeType,
         'Content-Length': size.toString(),
         'Accept-Ranges': 'bytes',
         'Content-Disposition': `inline; filename="${fileName}"`,
+        'Cache-Control': 'public, max-age=3600', // 1 hour cache
+        Connection: 'keep-alive',
       });
-      return new StreamableFile(createReadStream(filePath));
+
+      // Stream in chunks to reduce memory usage
+      return new StreamableFile(
+        createReadStream(filePath, {
+          highWaterMark: DEFAULT_CHUNK_SIZE, // Limit buffer size
+        }),
+      );
     }
 
     // Parse "bytes=start-end" and clamp to file size
     const match = /bytes=(\d*)-(\d*)/.exec(range);
     const start = match && match[1] ? parseInt(match[1], 10) : 0;
-    const end = match && match[2] ? parseInt(match[2], 10) : size - 1;
-    const safeStart = Math.min(start, size - 1);
-    const safeEnd = Math.min(end, size - 1);
+    let end = match && match[2] ? parseInt(match[2], 10) : size - 1;
+
+    // Memory optimization: Limit chunk size to prevent memory spikes
+    const MAX_CHUNK_SIZE = 2 * 1024 * 1024; // 2MB max per request
+    if (end - start > MAX_CHUNK_SIZE) {
+      end = start + MAX_CHUNK_SIZE - 1;
+    }
+
+    const safeStart = Math.max(0, Math.min(start, size - 1));
+    const safeEnd = Math.max(safeStart, Math.min(end, size - 1));
     const chunkSize = safeEnd - safeStart + 1;
 
     res.status(206);
@@ -326,10 +344,16 @@ export class FilesController {
       'Content-Length': chunkSize.toString(),
       'Content-Type': mimeType,
       'Content-Disposition': `inline; filename="${fileName}"`,
+      'Cache-Control': 'public, max-age=3600', // Cache video chunks
+      Connection: 'keep-alive',
     });
 
     return new StreamableFile(
-      createReadStream(filePath, { start: safeStart, end: safeEnd }),
+      createReadStream(filePath, {
+        start: safeStart,
+        end: safeEnd,
+        highWaterMark: Math.min(chunkSize, DEFAULT_CHUNK_SIZE), // Efficient buffering
+      }),
     );
   }
 

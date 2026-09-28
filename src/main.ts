@@ -1,4 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
+// Crypto polyfill for @nestjs/typeorm compatibility
+import { webcrypto } from 'crypto';
+if (!globalThis.crypto) {
+  globalThis.crypto = webcrypto as any;
+}
+
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -13,10 +19,27 @@ async function bootstrap() {
   const apiPrefix = configService.get('API_PREFIX') || 'api/v1';
   app.setGlobalPrefix(apiPrefix);
 
-  // Enable CORS
+  // Enable CORS with video streaming support
   app.enableCors({
     origin: configService.get('CORS_ORIGIN') || '*',
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: [
+      'Origin',
+      'X-Requested-With',
+      'Content-Type',
+      'Accept',
+      'Authorization',
+      'Range',
+      'Cache-Control',
+    ],
+    exposedHeaders: [
+      'Content-Range',
+      'Accept-Ranges',
+      'Content-Length',
+      'Content-Type',
+      'Content-Disposition',
+    ],
   });
 
   // Global validation pipe

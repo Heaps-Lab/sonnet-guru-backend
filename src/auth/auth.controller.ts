@@ -17,6 +17,7 @@ import {
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { VerifyOtpDto, ResendOtpDto } from './dto/verify-otp.dto';
 import { ApiResponse } from '../common/dto/response.dto';
 
 @ApiTags('Authentication')
@@ -134,31 +135,147 @@ export class AuthController {
     return ApiResponse.success(result, 'Authentication verified successfully.');
   }
 
-  @Get('verify-email')
-  @ApiOperation({ summary: 'Verify email address' })
-  @ApiQuery({ name: 'token', description: 'Email verification token' })
-  @SwaggerResponse({ status: 200, description: 'Email verified successfully' })
-  @SwaggerResponse({ status: 400, description: 'Invalid or expired token' })
-  async verifyEmail(@Query('token') token: string) {
-    return this.authService.verifyEmail(token);
-  }
-
-  @Post('resend-verification')
-  @ApiOperation({ summary: 'Resend verification email' })
-  @ApiBody({
+  @Post('verify-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Verify email with OTP code',
+    description:
+      'Verify user email address using the 6-digit OTP code sent via email',
+  })
+  @ApiBody({ type: VerifyOtpDto })
+  @SwaggerResponse({
+    status: 200,
+    description: 'Email verified successfully',
     schema: {
-      type: 'object',
-      properties: {
-        email: { type: 'string', example: 'user@example.com' },
+      example: {
+        success: true,
+        statusCode: 200,
+        message: 'Email verified successfully! You can now log in.',
+        data: {
+          user: {
+            id: '550e8400-e29b-41d4-a716-446655440000',
+            name: 'John Doe',
+            email: 'john.doe@example.com',
+            role: 'Student',
+          },
+        },
       },
     },
   })
-  @SwaggerResponse({ status: 200, description: 'Verification email sent' })
+  @SwaggerResponse({
+    status: 400,
+    description: 'Invalid OTP or format error',
+    schema: {
+      example: {
+        success: false,
+        statusCode: 400,
+        error: 'Bad Request',
+        message: 'Invalid OTP. 3 attempts remaining.',
+      },
+    },
+  })
+  @SwaggerResponse({
+    status: 429,
+    description: 'Too many failed attempts',
+    schema: {
+      example: {
+        success: false,
+        statusCode: 429,
+        error: 'Too Many Requests',
+        message: 'Too many failed attempts. Please request a new OTP.',
+      },
+    },
+  })
+  async verifyOTP(@Body() verifyOtpDto: VerifyOtpDto) {
+    const result = await this.authService.verifyOTP(
+      verifyOtpDto.email,
+      verifyOtpDto.otp,
+    );
+    return ApiResponse.success(result, result.message);
+  }
+
+  @Post('resend-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Resend OTP verification code',
+    description: 'Resend a new 6-digit OTP code to the user email address',
+  })
+  @ApiBody({ type: ResendOtpDto })
+  @SwaggerResponse({
+    status: 200,
+    description: 'New OTP sent successfully',
+    schema: {
+      example: {
+        success: true,
+        statusCode: 200,
+        message: 'New verification code sent. Please check your email.',
+        data: {
+          message: 'New verification code sent. Please check your email.',
+          otpExpiryMinutes: 5,
+        },
+      },
+    },
+  })
   @SwaggerResponse({
     status: 400,
     description: 'Email already verified or user not found',
+    schema: {
+      example: {
+        success: false,
+        statusCode: 400,
+        error: 'Bad Request',
+        message: 'Email is already verified',
+      },
+    },
   })
-  async resendVerification(@Body('email') email: string) {
-    return this.authService.resendVerificationEmail(email);
+  @SwaggerResponse({
+    status: 429,
+    description: 'Resend cooldown active',
+    schema: {
+      example: {
+        success: false,
+        statusCode: 429,
+        error: 'Too Many Requests',
+        message: 'Please wait 45 seconds before requesting a new OTP.',
+      },
+    },
+  })
+  async resendOTP(@Body() resendOtpDto: ResendOtpDto) {
+    const result = await this.authService.resendOTP(resendOtpDto.email);
+    return ApiResponse.success(result, result.message);
+  }
+
+  @Get('otp-status')
+  @ApiOperation({
+    summary: 'Get OTP verification status',
+    description:
+      'Check the current status of OTP verification for an email address',
+  })
+  @ApiQuery({
+    name: 'email',
+    description: 'Email address to check OTP status',
+    example: 'user@example.com',
+  })
+  @SwaggerResponse({
+    status: 200,
+    description: 'OTP status retrieved successfully',
+    schema: {
+      example: {
+        success: true,
+        statusCode: 200,
+        message: 'OTP status retrieved successfully',
+        data: {
+          exists: true,
+          expiresIn: 245,
+          attemptsRemaining: 5,
+          maxAttempts: 5,
+          canResend: false,
+        },
+      },
+    },
+  })
+  async getOTPStatus(@Query('email') email: string) {
+    const result = await this.authService.getOTPStatus(email);
+    return ApiResponse.success(result, 'OTP status retrieved successfully');
   }
 }

@@ -161,7 +161,7 @@ export class QuizzesService {
   ): Promise<QuizQuestion> {
     const quiz = await this.quizRepository.findOne({
       where: { id: quizId },
-      relations: { module: { course: true } },
+      relations: { module: { course: true }, questions: true },
     });
 
     if (!quiz) {
@@ -181,6 +181,20 @@ export class QuizzesService {
 
     if (quiz.isPublished) {
       throw new BadRequestException('Cannot add questions to published quiz');
+    }
+
+    // Validate that adding this question doesn't exceed quiz total marks
+    const currentQuestionsMarks = quiz.questions
+      .filter((q) => q.isActive !== false) // Only count active questions
+      .reduce((sum, q) => sum + Number(q.marks), 0);
+
+    const newQuestionMarks = Number(addQuestionDto.marks || 1);
+    const quizTotalMarks = Number(quiz.totalMarks);
+
+    if (currentQuestionsMarks + newQuestionMarks > quizTotalMarks) {
+      throw new BadRequestException(
+        `Cannot add question with ${newQuestionMarks.toFixed(2)} marks. Current questions total: ${currentQuestionsMarks.toFixed(2)}, Quiz total marks: ${quizTotalMarks.toFixed(2)}. Remaining marks available: ${(quizTotalMarks - currentQuestionsMarks).toFixed(2)}`,
+      );
     }
 
     return this.dataSource.transaction(async (manager) => {
@@ -209,9 +223,8 @@ export class QuizzesService {
 
       await manager.save(QuestionOption, options);
 
-      // Update quiz total marks
-      const totalMarks = quiz.totalMarks + (addQuestionDto.marks || 1);
-      await manager.update(Quiz, quizId, { totalMarks });
+      // Note: We don't update quiz total marks here anymore
+      // Quiz total marks is fixed and questions distribute within that total
 
       return savedQuestion;
     });
@@ -555,8 +568,255 @@ export class QuizzesService {
       throw new BadRequestException('Cannot publish quiz without questions');
     }
 
+    // Validate that question marks sum equals quiz total marks
+    const questionsMarksSum = quiz.questions
+      .filter((q) => q.isActive !== false) // Only count active questions
+      .reduce((sum, q) => sum + Number(q.marks), 0);
+
+    const quizTotalMarks = Number(quiz.totalMarks);
+
+    // Use a small tolerance for decimal comparison (0.01 for 2 decimal places)
+    const tolerance = 0.01;
+    const marksDifference = Math.abs(questionsMarksSum - quizTotalMarks);
+
+    if (marksDifference > tolerance) {
+      throw new BadRequestException(
+        `Cannot publish quiz. Questions total marks (${questionsMarksSum.toFixed(2)}) must equal quiz total marks (${quizTotalMarks.toFixed(2)})`,
+      );
+    }
+
     await this.quizRepository.update(quizId, { isPublished: true });
     return this.findOne(quizId, user);
+  }
+
+  async deleteQuestion(
+    questionId: string,
+    user: User,
+  ): Promise<{
+    message: string;
+    deletedQuestion: { id: string; questionText: string };
+  }> {
+    // Get question with quiz and course relations for permission checking
+    const question = await this.questionRepository.findOne({
+      where: { id: questionId, isActive: true },
+      relations: {
+        quiz: {
+          module: { course: true },
+        },
+        options: true,
+      },
+    });
+
+    if (!question) {
+      throw new NotFoundException('Question not found or already deleted');
+    }
+
+    // Check permissions - only quiz creators/instructors and admins can delete questions
+    if (
+      ![Role.SUPER_ADMIN, Role.ADMIN].includes(user.role) &&
+      (user.role !== Role.TEACHER ||
+        question.quiz.module.course.instructorId !== user.id)
+    ) {
+      throw new ForbiddenException(
+        'You do not have permission to delete questions from this quiz',
+      );
+    }
+
+    // Check if quiz is published - cannot delete questions from published quizzes
+    if (question.quiz.isPublished) {
+      throw new BadRequestException(
+        'Cannot delete questions from a published quiz',
+      );
+    }
+
+    // Use transaction to ensure data consistency
+    const result = await this.dataSource.transaction(async (manager) => {
+      // Store question info for response
+      const deletedQuestionInfo = {
+        id: question.id,
+        questionText: question.questionText,
+      };
+
+      // Soft delete the question (set isActive to false)
+      await manager.update(QuizQuestion, questionId, {
+        isActive: false,
+      });
+
+      // Soft delete all associated options
+      await manager.update(QuestionOption, { questionId }, { isActive: false });
+
+      // Update sequence numbers for remaining questions
+      const remainingQuestions = await manager.find(QuizQuestion, {
+        where: {
+          quizId: question.quizId,
+          isActive: true,
+        },
+        order: { sequenceNumber: 'ASC' },
+      });
+
+      // Filter and update questions that come after the deleted one
+      const questionsToUpdate = remainingQuestions.filter(
+        (q) => q.sequenceNumber > question.sequenceNumber,
+      );
+
+      for (const q of questionsToUpdate) {
+        await manager.update(QuizQuestion, q.id, {
+          sequenceNumber: q.sequenceNumber - 1,
+        });
+      }
+
+      return deletedQuestionInfo;
+    });
+
+    return {
+      message: 'Question and its options deleted successfully',
+      deletedQuestion: result,
+    };
+  }
+
+  async restoreQuestion(
+    questionId: string,
+    user: User,
+  ): Promise<{
+    message: string;
+    restoredQuestion: { id: string; questionText: string };
+  }> {
+    // Get question even if inactive for restoration
+    const question = await this.questionRepository.findOne({
+      where: { id: questionId },
+      relations: {
+        quiz: {
+          module: { course: true },
+        },
+        options: true,
+      },
+    });
+
+    if (!question) {
+      throw new NotFoundException('Question not found');
+    }
+
+    if (question.isActive) {
+      throw new BadRequestException('Question is already active');
+    }
+
+    // Check permissions
+    if (
+      ![Role.SUPER_ADMIN, Role.ADMIN].includes(user.role) &&
+      (user.role !== Role.TEACHER ||
+        question.quiz.module.course.instructorId !== user.id)
+    ) {
+      throw new ForbiddenException(
+        'You do not have permission to restore questions in this quiz',
+      );
+    }
+
+    // Check if quiz is published
+    if (question.quiz.isPublished) {
+      throw new BadRequestException(
+        'Cannot restore questions in a published quiz',
+      );
+    }
+
+    // Use transaction for restoration
+    const result = await this.dataSource.transaction(async (manager) => {
+      // Store question info for response
+      const restoredQuestionInfo = {
+        id: question.id,
+        questionText: question.questionText,
+      };
+
+      // Restore the question
+      await manager.update(QuizQuestion, questionId, {
+        isActive: true,
+      });
+
+      // Restore all associated options
+      await manager.update(QuestionOption, { questionId }, { isActive: true });
+
+      return restoredQuestionInfo;
+    });
+
+    return {
+      message: 'Question and its options restored successfully',
+      restoredQuestion: result,
+    };
+  }
+
+  async permanentDeleteQuestion(
+    questionId: string,
+    user: User,
+  ): Promise<{
+    message: string;
+    deletedQuestion: { id: string; questionText: string };
+  }> {
+    // Only super admins can permanently delete
+    if (user.role !== Role.SUPER_ADMIN) {
+      throw new ForbiddenException(
+        'Only super administrators can permanently delete questions',
+      );
+    }
+
+    const question = await this.questionRepository.findOne({
+      where: { id: questionId },
+      relations: {
+        quiz: {
+          module: { course: true },
+        },
+        options: true,
+      },
+    });
+
+    if (!question) {
+      throw new NotFoundException('Question not found');
+    }
+
+    // Check if quiz is published
+    if (question.quiz.isPublished) {
+      throw new BadRequestException(
+        'Cannot permanently delete questions from a published quiz',
+      );
+    }
+
+    // Use transaction for permanent deletion
+    const result = await this.dataSource.transaction(async (manager) => {
+      const deletedQuestionInfo = {
+        id: question.id,
+        questionText: question.questionText,
+      };
+
+      // Permanently delete all options first (due to foreign key constraints)
+      await manager.delete(QuestionOption, { questionId });
+
+      // Permanently delete the question
+      await manager.delete(QuizQuestion, questionId);
+
+      // Update sequence numbers for remaining questions
+      const remainingQuestions = await manager.find(QuizQuestion, {
+        where: {
+          quizId: question.quizId,
+        },
+        order: { sequenceNumber: 'ASC' },
+      });
+
+      // Filter and update questions that come after the deleted one
+      const questionsToUpdate = remainingQuestions.filter(
+        (q) => q.sequenceNumber > question.sequenceNumber,
+      );
+
+      for (const q of questionsToUpdate) {
+        await manager.update(QuizQuestion, q.id, {
+          sequenceNumber: q.sequenceNumber - 1,
+        });
+      }
+
+      return deletedQuestionInfo;
+    });
+
+    return {
+      message: 'Question and its options permanently deleted',
+      deletedQuestion: result,
+    };
   }
 
   private async getNextSequenceNumber(quizId: string): Promise<number> {

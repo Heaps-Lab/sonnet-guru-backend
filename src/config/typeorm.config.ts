@@ -4,12 +4,13 @@ import { config } from 'dotenv';
 config();
 
 export const typeOrmConfig: DataSourceOptions = {
-  type: 'mariadb',
+  type: 'mysql',
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '3306'),
-  username: process.env.DB_USERNAME || 'serversonnetguru_LMS',
+  username: process.env.DB_USERNAME || 'root',
   password: process.env.DB_PASSWORD || '?D#+D6WJjI4]A^1o',
-  database: process.env.DB_DATABASE || 'serversonnetguru_LMS',
+  database:
+    process.env.DB_NAME || process.env.DB_DATABASE || 'serversonnetguru_LMS',
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
   migrations: [__dirname + '/../database/migrations/*{.ts,.js}'],
   synchronize: false, // Never use true in production

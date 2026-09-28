@@ -50,83 +50,150 @@ export class EmailService {
     });
   }
 
-  async sendVerificationEmail(
+  async sendOTPVerificationEmail(
     email: string,
     name: string,
-    token: string,
+    otp: string,
   ): Promise<void> {
-    const verificationUrl = `${this.configService.get<string>('FRONTEND_URL')}/verify-email?token=${token}`;
     const appName =
       this.configService.get<string>('APP_NAME') || 'Sonnet Guru LMS';
 
-    this.logger.log(`Preparing to send verification email to: ${email}`);
-    this.logger.log(`Verification URL: ${verificationUrl}`);
+    this.logger.log(`Preparing to send OTP verification email to: ${email}`);
+    this.logger.log(`OTP: ${otp.substring(0, 2)}****`); // Log partial OTP for debugging
 
     const mailOptions = {
       from: `"${appName}" <${this.configService.get<string>('MAIL_FROM')}>`,
       to: email,
-      subject: `Verify your email - ${appName}`,
+      subject: `Your verification code for ${appName}`,
       html: `
         <!DOCTYPE html>
         <html>
         <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Verify Your Email</title>
+          <title>Email Verification Code</title>
           <style>
             body {
-              font-family: Arial, sans-serif;
+              font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
               line-height: 1.6;
               color: #333;
               max-width: 600px;
               margin: 0 auto;
               padding: 20px;
+              background-color: #f8fafc;
             }
             .container {
-              background-color: #f9f9f9;
-              border-radius: 10px;
-              padding: 30px;
-              box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+              background-color: #ffffff;
+              border-radius: 12px;
+              padding: 0;
+              box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+              overflow: hidden;
             }
             .header {
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+              padding: 30px;
               text-align: center;
-              margin-bottom: 30px;
             }
             .header h1 {
-              color: #4F46E5;
               margin: 0;
+              font-size: 28px;
+              font-weight: 300;
+            }
+            .header .subtitle {
+              font-size: 16px;
+              opacity: 0.9;
+              margin-top: 5px;
             }
             .content {
-              background-color: white;
-              padding: 30px;
-              border-radius: 8px;
+              padding: 40px 30px;
             }
-            .button {
+            .otp-section {
+              text-align: center;
+              margin: 30px 0;
+            }
+            .otp-code {
               display: inline-block;
-              padding: 14px 30px;
-              background-color: #4F46E5;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
               color: white;
-              text-decoration: none;
-              border-radius: 5px;
-              margin: 20px 0;
+              font-size: 32px;
               font-weight: bold;
+              letter-spacing: 8px;
+              padding: 20px 30px;
+              border-radius: 12px;
+              margin: 20px 0;
+              box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+              font-family: 'Courier New', monospace;
             }
-            .button:hover {
-              background-color: #4338CA;
+            .otp-description {
+              color: #64748b;
+              font-size: 14px;
+              margin-top: 15px;
+            }
+            .info-box {
+              background-color: #f1f5f9;
+              border-left: 4px solid #3b82f6;
+              padding: 20px;
+              margin: 25px 0;
+              border-radius: 0 8px 8px 0;
+            }
+            .warning-box {
+              background-color: #fef7cd;
+              border-left: 4px solid #f59e0b;
+              padding: 20px;
+              margin: 25px 0;
+              border-radius: 0 8px 8px 0;
+            }
+            .steps {
+              background-color: #f8fafc;
+              padding: 25px;
+              border-radius: 8px;
+              margin: 25px 0;
+            }
+            .steps h3 {
+              color: #475569;
+              margin-top: 0;
+              font-size: 18px;
+            }
+            .steps ol {
+              margin: 15px 0;
+              padding-left: 20px;
+            }
+            .steps li {
+              margin-bottom: 8px;
+              color: #64748b;
             }
             .footer {
+              background-color: #f8fafc;
+              padding: 25px 30px;
               text-align: center;
-              margin-top: 30px;
-              font-size: 12px;
-              color: #666;
+              border-top: 1px solid #e2e8f0;
             }
-            .token-box {
-              background-color: #f3f4f6;
+            .footer p {
+              margin: 5px 0;
+              font-size: 12px;
+              color: #94a3b8;
+            }
+            .security-note {
+              background-color: #fef2f2;
+              border-left: 4px solid #ef4444;
               padding: 15px;
-              border-radius: 5px;
               margin: 20px 0;
-              word-break: break-all;
-              font-family: monospace;
+              border-radius: 0 8px 8px 0;
+              font-size: 14px;
+            }
+            @media (max-width: 600px) {
+              .otp-code {
+                font-size: 28px;
+                letter-spacing: 6px;
+                padding: 15px 20px;
+              }
+              .container {
+                margin: 10px;
+              }
+              body {
+                padding: 10px;
+              }
             }
           </style>
         </head>
@@ -134,61 +201,249 @@ export class EmailService {
           <div class="container">
             <div class="header">
               <h1>${appName}</h1>
-              <p>Welcome aboard! 🎉</p>
+              <p class="subtitle">🔐 Email Verification Required</p>
             </div>
             
             <div class="content">
-              <h2>Hi ${name},</h2>
+              <h2>Hi ${name}! 👋</h2>
               
-              <p>Thank you for registering with ${appName}! To complete your registration and start learning, please verify your email address.</p>
+              <p>Welcome to ${appName}! To complete your registration and start your learning journey, please verify your email address using the code below:</p>
               
-              <p>Click the button below to verify your email:</p>
-              
-              <div style="text-align: center;">
-                <a href="${verificationUrl}" class="button">Verify Email Address</a>
+              <div class="otp-section">
+                <div class="otp-code">${otp.substring(0, 3)}-${otp.substring(3, 6)}</div>
+                <p class="otp-description">Enter this 6-digit code in the verification form</p>
               </div>
               
-              <p>Or copy and paste this link into your browser:</p>
-              <div class="token-box">${verificationUrl}</div>
+              <div class="info-box">
+                <strong>📱 Quick Verification Steps:</strong>
+                <div class="steps">
+                  <ol>
+                    <li>Copy the 6-digit code above</li>
+                    <li>Return to the ${appName} verification page</li>
+                    <li>Paste or type the code in the verification field</li>
+                    <li>Click "Verify Email" to complete your registration</li>
+                  </ol>
+                </div>
+              </div>
               
-              <p><strong>Important:</strong> This verification link will expire in 24 hours.</p>
+              <div class="warning-box">
+                <strong>⏰ Important:</strong>
+                <ul style="margin: 10px 0; padding-left: 20px;">
+                  <li>This code expires in <strong>5 minutes</strong></li>
+                  <li>You have <strong>5 attempts</strong> to enter the correct code</li>
+                  <li>If the code expires, you can request a new one</li>
+                </ul>
+              </div>
               
-              <p>If you didn't create an account with ${appName}, please ignore this email.</p>
+              <div class="security-note">
+                <strong>🛡️ Security Notice:</strong><br>
+                • Never share this code with anyone<br>
+                • ${appName} will never ask for this code via phone or email<br>
+                • If you didn't request this verification, please ignore this email
+              </div>
               
-              <p>Best regards,<br>The ${appName} Team</p>
+              <p>Once verified, you'll have access to:</p>
+              <ul>
+                <li>📚 Premium course content</li>
+                <li>🎥 High-quality video lessons</li>
+                <li>📝 Interactive quizzes and assessments</li>
+                <li>🏆 Completion certificates</li>
+                <li>💬 Community discussions</li>
+              </ul>
+              
+              <p>Need help? Contact our support team at <a href="mailto:${this.configService.get<string>('MAIL_FROM')}" style="color: #3b82f6;">${this.configService.get<string>('MAIL_FROM')}</a></p>
+              
+              <p>Best regards,<br>The ${appName} Team 🎓</p>
             </div>
             
             <div class="footer">
               <p>This is an automated email. Please do not reply to this message.</p>
               <p>&copy; ${new Date().getFullYear()} ${appName}. All rights reserved.</p>
+              <p>If you're having trouble with verification, visit our help center.</p>
             </div>
           </div>
         </body>
         </html>
       `,
+      text: `
+Hi ${name},
+
+Welcome to ${appName}! 
+
+Your email verification code is: ${otp}
+
+Please enter this 6-digit code in the verification form to complete your registration.
+
+Important:
+- This code expires in 5 minutes
+- You have 5 attempts to enter the correct code
+- Never share this code with anyone
+
+If you didn't request this verification, please ignore this email.
+
+Best regards,
+The ${appName} Team
+
+---
+This is an automated email. Please do not reply to this message.
+      `,
     };
 
     try {
       this.logger.log(
-        `Sending email from: ${mailOptions.from} to: ${mailOptions.to}`,
+        `Sending OTP email from: ${mailOptions.from} to: ${mailOptions.to}`,
       );
       const info = await this.transporter.sendMail(mailOptions);
-      this.logger.log(`✅ Verification email sent successfully to ${email}`);
+      this.logger.log(
+        `✅ OTP verification email sent successfully to ${email}`,
+      );
       this.logger.log(`Message ID: ${info.messageId}`);
-      this.logger.log(`Response: ${info.response}`);
     } catch (error) {
-      this.logger.error(`❌ Failed to send verification email to ${email}`);
+      this.logger.error(`❌ Failed to send OTP email to ${email}`);
       this.logger.error(`Error details: ${JSON.stringify(error)}`);
       throw error;
     }
   }
+
+  // async sendVerificationEmail(
+  //   email: string,
+  //   name: string,
+  //   token: string,
+  // ): Promise<void> {
+  //   const verificationUrl = `${this.configService.get<string>('FRONTEND_URL')}/verify-email?token=${token}`;
+  //   const appName =
+  //     this.configService.get<string>('APP_NAME') || 'Sonnet Guru LMS';
+
+  //   this.logger.log(`Preparing to send verification email to: ${email}`);
+  //   this.logger.log(`Verification URL: ${verificationUrl}`);
+
+  //   const mailOptions = {
+  //     from: `"${appName}" <${this.configService.get<string>('MAIL_FROM')}>`,
+  //     to: email,
+  //     subject: `Verify your email - ${appName}`,
+  //     html: `
+  //       <!DOCTYPE html>
+  //       <html>
+  //       <head>
+  //         <meta charset="utf-8">
+  //         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  //         <title>Verify Your Email</title>
+  //         <style>
+  //           body {
+  //             font-family: Arial, sans-serif;
+  //             line-height: 1.6;
+  //             color: #333;
+  //             max-width: 600px;
+  //             margin: 0 auto;
+  //             padding: 20px;
+  //           }
+  //           .container {
+  //             background-color: #f9f9f9;
+  //             border-radius: 10px;
+  //             padding: 30px;
+  //             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  //           }
+  //           .header {
+  //             text-align: center;
+  //             margin-bottom: 30px;
+  //           }
+  //           .header h1 {
+  //             color: #4F46E5;
+  //             margin: 0;
+  //           }
+  //           .content {
+  //             background-color: white;
+  //             padding: 30px;
+  //             border-radius: 8px;
+  //           }
+  //           .button {
+  //             display: inline-block;
+  //             padding: 14px 30px;
+  //             background-color: #4F46E5;
+  //             color: white;
+  //             text-decoration: none;
+  //             border-radius: 5px;
+  //             margin: 20px 0;
+  //             font-weight: bold;
+  //           }
+  //           .button:hover {
+  //             background-color: #4338CA;
+  //           }
+  //           .footer {
+  //             text-align: center;
+  //             margin-top: 30px;
+  //             font-size: 12px;
+  //             color: #666;
+  //           }
+  //           .token-box {
+  //             background-color: #f3f4f6;
+  //             padding: 15px;
+  //             border-radius: 5px;
+  //             margin: 20px 0;
+  //             word-break: break-all;
+  //             font-family: monospace;
+  //           }
+  //         </style>
+  //       </head>
+  //       <body>
+  //         <div class="container">
+  //           <div class="header">
+  //             <h1>${appName}</h1>
+  //             <p>Welcome aboard! 🎉</p>
+  //           </div>
+
+  //           <div class="content">
+  //             <h2>Hi ${name},</h2>
+
+  //             <p>Thank you for registering with ${appName}! To complete your registration and start learning, please verify your email address.</p>
+
+  //             <p>Click the button below to verify your email:</p>
+
+  //             <div style="text-align: center;">
+  //               <a href="${verificationUrl}" class="button">Verify Email Address</a>
+  //             </div>
+
+  //             <p>Or copy and paste this link into your browser:</p>
+  //             <div class="token-box">${verificationUrl}</div>
+
+  //             <p><strong>Important:</strong> This verification link will expire in 24 hours.</p>
+
+  //             <p>If you didn't create an account with ${appName}, please ignore this email.</p>
+
+  //             <p>Best regards,<br>The ${appName} Team</p>
+  //           </div>
+
+  //           <div class="footer">
+  //             <p>This is an automated email. Please do not reply to this message.</p>
+  //             <p>&copy; ${new Date().getFullYear()} ${appName}. All rights reserved.</p>
+  //           </div>
+  //         </div>
+  //       </body>
+  //       </html>
+  //     `,
+  //   };
+
+  //   try {
+  //     this.logger.log(
+  //       `Sending email from: ${mailOptions.from} to: ${mailOptions.to}`,
+  //     );
+  //     const info = await this.transporter.sendMail(mailOptions);
+  //     this.logger.log(`✅ Verification email sent successfully to ${email}`);
+  //     this.logger.log(`Message ID: ${info.messageId}`);
+  //     this.logger.log(`Response: ${info.response}`);
+  //   } catch (error) {
+  //     this.logger.error(`❌ Failed to send verification email to ${email}`);
+  //     this.logger.error(`Error details: ${JSON.stringify(error)}`);
+  //     throw error;
+  //   }
+  // }
 
   async sendPasswordResetEmail(
     email: string,
     name: string,
     token: string,
   ): Promise<void> {
-    const resetUrl = `${this.configService.get<string>('FRONTEND_URL')}/reset-password?token=${token}`;
+    const resetUrl = `${this.configService.get<string>('https://sonnetguru.com')}/reset-password?token=${token}`;
     const appName =
       this.configService.get<string>('APP_NAME') || 'Sonnet Guru LMS';
 
@@ -327,7 +582,9 @@ export class EmailService {
   ): Promise<void> {
     const appName =
       this.configService.get<string>('APP_NAME') || 'Sonnet Guru LMS';
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
+    const frontendUrl = this.configService.get<string>(
+      'https://sonnetguru.com',
+    );
 
     const mailOptions = {
       from: `"${appName}" <${this.configService.get<string>('MAIL_FROM')}>`,

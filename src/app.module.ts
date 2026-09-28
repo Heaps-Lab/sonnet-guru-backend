@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/require-await */
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -13,8 +14,10 @@ import { ModulesModule } from './modules/modules.module';
 import { QuizzesModule } from './quizzes/quizzes.module';
 import { PaymentsModule } from './payments/payments.module';
 import { TeacherApplicationsModule } from './teacher-applications/teacher-applications.module';
+import { RedisModule } from './common/redis/redis.module';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { MemoryMonitorService } from './common/services/memory-monitor.service';
 
 @Module({
   imports: [
@@ -27,19 +30,32 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     // TypeORM MySQL connection
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        type: 'mysql',
-        host: configService.get<string>('DB_HOST'),
-        port: configService.get<number>('DB_PORT'),
-        username: configService.get<string>('DB_USERNAME'),
-        password: configService.get<string>('DB_PASSWORD'),
-        database: configService.get<string>('DB_DATABASE'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: false, // Always false in production
-        logging: configService.get('NODE_ENV') === 'development',
-        charset: 'utf8mb4',
-        timezone: 'Z',
-      }),
+      useFactory: async (configService: ConfigService) => {
+        const dbConfig = {
+          type: 'mysql' as const,
+          host: configService.get<string>('DB_HOST') || 'fresh_mysql',
+          port: parseInt(configService.get<string>('DB_PORT') || '3306'),
+          username: configService.get<string>('DB_USERNAME') || 'root',
+          password:
+            configService.get<string>('DB_PASSWORD') || '?D#+D6WJjI4]A^1o',
+          database:
+            configService.get<string>('DB_NAME') ||
+            configService.get<string>('DB_DATABASE') ||
+            'serversonnetguru_LMS',
+          entities: [__dirname + '/**/*.entity{.ts,.js}'],
+          synchronize: false,
+          logging: configService.get('NODE_ENV') === 'development',
+          charset: 'utf8mb4',
+          timezone: 'Z',
+        };
+
+        console.log('Database config:', {
+          ...dbConfig,
+          password: '***hidden***',
+        });
+
+        return dbConfig;
+      },
       inject: [ConfigService],
     }),
 
@@ -56,6 +72,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     }),
 
     // Feature modules
+    RedisModule,
     AuthModule,
     UsersModule,
     CoursesModule,
@@ -68,6 +85,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
   controllers: [AppController],
   providers: [
     AppService,
+    MemoryMonitorService, // Add memory monitoring
     {
       provide: APP_INTERCEPTOR,
       useClass: ResponseInterceptor,

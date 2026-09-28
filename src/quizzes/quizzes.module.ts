@@ -4,6 +4,7 @@ import { QuizzesService, QuizCalculationService } from './quizzes.service';
 import {
   QuizzesController,
   QuizSubmissionsController,
+  QuizQuestionsController,
 } from './quizzes.controller';
 import { Quiz } from './entities/quiz.entity';
 import { QuizQuestion } from './entities/quiz-question.entity';
@@ -23,7 +24,11 @@ import { Module as ModuleEntity } from '../modules/entities/module.entity';
       ModuleEntity,
     ]),
   ],
-  controllers: [QuizzesController, QuizSubmissionsController],
+  controllers: [
+    QuizzesController,
+    QuizSubmissionsController,
+    QuizQuestionsController,
+  ],
   providers: [QuizzesService, QuizCalculationService],
   exports: [QuizzesService],
 })
