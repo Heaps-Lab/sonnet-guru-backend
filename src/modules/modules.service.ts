@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, Not } from 'typeorm';
 import { Module } from './entities/module.entity';
 import { Video } from './entities/video.entity';
 import { ModuleSheet } from './entities/module-sheet.entity';
@@ -15,6 +15,7 @@ import { Enrollment } from '../payments/entities/enrollment.entity';
 import { CreateModuleDto } from './dto/create-module.dto';
 import { UpdateModuleDto } from './dto/update-module.dto';
 import { UploadVideoDto } from './dto/upload-video.dto';
+import { UpdateVideoDto } from './dto/update-video.dto';
 import { UploadSheetDto } from './dto/upload-sheet.dto';
 import { CompleteModuleDto } from './dto/complete-module.dto';
 import { User } from '../users/entities/user.entity';
@@ -259,7 +260,7 @@ export class ModulesService {
   async uploadVideo(
     moduleId: string,
     uploadVideoDto: UploadVideoDto,
-    file: Express.Multer.File,
+    file: Express.Multer.File | undefined,
     user: User,
   ): Promise<Video> {
     const module = await this.findOne(moduleId, user);
@@ -278,6 +279,13 @@ export class ModulesService {
       throw new BadRequestException('Cannot add videos to a completed module');
     }
 
+    // Validate that either file or videoUrl is provided
+    if (!file && !uploadVideoDto.videoUrl) {
+      throw new BadRequestException(
+        'Either a video file or a direct video URL must be provided',
+      );
+    }
+
     // Check for duplicate sequence number
     const existingVideo = await this.videoRepository.findOne({
       where: { moduleId, sequenceNumber: uploadVideoDto.sequenceNumber },
@@ -290,31 +298,64 @@ export class ModulesService {
     }
 
     return this.dataSource.transaction(async (manager) => {
-      // Generate unique filename
-      const fileExtension = path.extname(file.originalname);
-      const fileName = `${uuidv4()}${fileExtension}`;
-      const uploadPath = path.join(process.cwd(), 'uploads', 'videos');
+      let fileName: string | null = null;
+      let videoUrl: string;
+      let videoSource: 'uploaded' | 'external';
+      let fileSize: number = 0;
+      let mimeType: string = '';
+      let duration: number = uploadVideoDto.duration || 0;
 
-      // Ensure upload directory exists
-      if (!fs.existsSync(uploadPath)) {
-        fs.mkdirSync(uploadPath, { recursive: true });
+      // Handle file upload
+      if (file) {
+        if (file.size === 0) {
+          throw new BadRequestException('Cannot upload an empty file');
+        }
+
+        // Generate unique filename
+        const fileExtension = path.extname(file.originalname);
+        fileName = `${uuidv4()}${fileExtension}`;
+        const uploadPath = path.join(process.cwd(), 'uploads', 'videos');
+
+        // Ensure upload directory exists
+        if (!fs.existsSync(uploadPath)) {
+          fs.mkdirSync(uploadPath, { recursive: true });
+        }
+
+        const filePath = path.join(uploadPath, fileName);
+
+        // Save file to disk
+        fs.writeFileSync(filePath, file.buffer);
+
+        videoUrl = `/api/v1/videos/${fileName}`;
+        videoSource = 'uploaded';
+        fileSize = file.size;
+        mimeType = file.mimetype;
+        // In production, extract actual duration from video
+        duration = 0;
+      } else {
+        // Handle direct URL
+        videoUrl = uploadVideoDto.videoUrl!; // We know it exists because we're in this branch
+        videoSource = 'external';
+        fileName = null;
+        fileSize = 0; // Not applicable for external URLs
+        mimeType = ''; // Not applicable for external URLs
+        duration = uploadVideoDto.duration || 0;
       }
-
-      const filePath = path.join(uploadPath, fileName);
-
-      // Save file to disk
-      fs.writeFileSync(filePath, file.buffer);
 
       // Create video record
       const video = manager.create(Video, {
-        ...uploadVideoDto,
+        title: uploadVideoDto.title,
+        description: uploadVideoDto.description || null,
+        sequenceNumber: uploadVideoDto.sequenceNumber,
+        isDownloadable: uploadVideoDto.isDownloadable ?? true,
         moduleId,
-        fileName,
-        videoUrl: `/api/v1/videos/${fileName}`,
-        fileSize: file.size,
-        mimeType: file.mimetype,
+        fileName: fileName || null,
+        videoUrl,
+        videoSource,
+        fileSize,
+        mimeType,
+        duration,
         status: 'ready', // In production, this would be 'processing' initially
-        duration: 0, // Would be extracted during processing
       });
 
       const savedVideo = await manager.save(Video, video);
@@ -325,6 +366,135 @@ export class ModulesService {
       });
 
       return savedVideo;
+    });
+  }
+
+  async updateVideo(
+    videoId: string,
+    updateVideoDto: UpdateVideoDto,
+    file: Express.Multer.File | undefined,
+    user: User,
+  ): Promise<Video> {
+    const video = await this.videoRepository
+      .createQueryBuilder('video')
+      .leftJoinAndSelect('video.module', 'module')
+      .leftJoinAndSelect('module.course', 'course')
+      .where('video.id = :videoId', { videoId })
+      .getOne();
+
+    if (!video) {
+      throw new NotFoundException('Video not found');
+    }
+
+    // Check permissions
+    if (
+      ![Role.SUPER_ADMIN, Role.ADMIN].includes(user.role) &&
+      (user.role !== Role.TEACHER ||
+        video.module.course.instructorId !== user.id)
+    ) {
+      throw new ForbiddenException(
+        'You do not have permission to update this video',
+      );
+    }
+
+    if (video.module.isCompleted) {
+      throw new BadRequestException(
+        'Cannot update videos from a completed module',
+      );
+    }
+
+    // Check for duplicate sequence number if changing it
+    if (
+      updateVideoDto.sequenceNumber &&
+      updateVideoDto.sequenceNumber !== video.sequenceNumber
+    ) {
+      const existingVideo = await this.videoRepository.findOne({
+        where: {
+          moduleId: video.moduleId,
+          sequenceNumber: updateVideoDto.sequenceNumber,
+          id: Not(videoId),
+        },
+      });
+
+      if (existingVideo) {
+        throw new BadRequestException(
+          'Video with this sequence number already exists',
+        );
+      }
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      let updateData: Partial<Video> = {};
+
+      // Update basic fields if provided
+      if (updateVideoDto.title) updateData.title = updateVideoDto.title;
+      if (updateVideoDto.description !== undefined)
+        updateData.description = updateVideoDto.description;
+      if (updateVideoDto.sequenceNumber)
+        updateData.sequenceNumber = updateVideoDto.sequenceNumber;
+      if (updateVideoDto.isDownloadable !== undefined)
+        updateData.isDownloadable = updateVideoDto.isDownloadable;
+
+      // Handle video replacement scenarios
+      if (file || updateVideoDto.videoUrl) {
+        // Delete old uploaded file if replacing with a new one
+        if (file && video.videoSource === 'uploaded' && video.fileName) {
+          const oldFilePath = path.join(
+            process.cwd(),
+            'uploads',
+            'videos',
+            video.fileName,
+          );
+          if (fs.existsSync(oldFilePath)) {
+            fs.unlinkSync(oldFilePath);
+          }
+        }
+
+        if (file) {
+          // Upload new file
+          if (file.size === 0) {
+            throw new BadRequestException('Cannot upload an empty file');
+          }
+
+          const fileExtension = path.extname(file.originalname);
+          const fileName = `${uuidv4()}${fileExtension}`;
+          const uploadPath = path.join(process.cwd(), 'uploads', 'videos');
+
+          if (!fs.existsSync(uploadPath)) {
+            fs.mkdirSync(uploadPath, { recursive: true });
+          }
+
+          const filePath = path.join(uploadPath, fileName);
+          fs.writeFileSync(filePath, file.buffer);
+
+          updateData.fileName = fileName;
+          updateData.videoUrl = `/api/v1/videos/${fileName}`;
+          updateData.videoSource = 'uploaded';
+          updateData.fileSize = file.size;
+          updateData.mimeType = file.mimetype;
+          updateData.duration = 0; // Would be extracted in production
+        } else if (updateVideoDto.videoUrl) {
+          // Update to external URL
+          updateData.videoUrl = updateVideoDto.videoUrl;
+          updateData.videoSource = 'external';
+          updateData.fileName = null;
+          updateData.fileSize = 0;
+          updateData.mimeType = '';
+          updateData.duration = updateVideoDto.duration || video.duration;
+        }
+      }
+
+      // Update the video
+      await manager.update(Video, videoId, updateData);
+
+      // Return updated video
+      const updatedVideo = await manager.findOne(Video, {
+        where: { id: videoId },
+      });
+      if (!updatedVideo) {
+        throw new NotFoundException('Video not found after update');
+      }
+      return updatedVideo;
     });
   }
 
@@ -470,16 +640,19 @@ export class ModulesService {
       );
     }
 
-    // Delete file from disk
-    const filePath = path.join(
-      process.cwd(),
-      'uploads',
-      'videos',
-      video.fileName,
-    );
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    // Delete file from disk only if it's an uploaded video
+    if (video.videoSource === 'uploaded' && video.fileName) {
+      const filePath = path.join(
+        process.cwd(),
+        'uploads',
+        'videos',
+        video.fileName,
+      );
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
     }
+    // External URLs don't need cleanup
 
     await this.videoRepository.remove(video);
   }

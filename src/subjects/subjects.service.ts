@@ -256,15 +256,18 @@ export class SubjectsService {
     // Delete video files and records
     for (const video of videos) {
       try {
-        const videoPath = path.join(
-          process.cwd(),
-          'uploads',
-          'videos',
-          video.fileName,
-        );
-        if (fs.existsSync(videoPath)) {
-          fs.unlinkSync(videoPath);
-          this.logger.log(`Deleted video file: ${video.fileName}`);
+        // Only delete file if it has a fileName (uploaded videos)
+        if (video.fileName) {
+          const videoPath = path.join(
+            process.cwd(),
+            'uploads',
+            'videos',
+            video.fileName,
+          );
+          if (fs.existsSync(videoPath)) {
+            fs.unlinkSync(videoPath);
+            this.logger.log(`Deleted video file: ${video.fileName}`);
+          }
         }
       } catch (error) {
         this.logger.error(

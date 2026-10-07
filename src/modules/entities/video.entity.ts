@@ -25,16 +25,23 @@ export class Video {
   title: string;
 
   @Column({ type: 'text', nullable: true })
-  description: string;
+  description: string | null;
 
-  @Column({ type: 'varchar', length: 1000 })
-  fileName: string; // Unique filename on server
+  @Column({ type: 'varchar', length: 1000, nullable: true })
+  fileName: string | null; // Unique filename on server (null if using external URL)
 
   @Column({ type: 'varchar', length: 1000 })
   videoUrl: string; // Full URL to access the video
 
+  @Column({
+    type: 'enum',
+    enum: ['uploaded', 'external'],
+    default: 'uploaded',
+  })
+  videoSource: string; // Track if video is uploaded or external URL
+
   @Column({ type: 'varchar', length: 1000, nullable: true })
-  hlsPlaylistUrl: string; // HLS streaming URL
+  hlsPlaylistUrl: string | null; // HLS streaming URL
 
   @Column({ type: 'int' })
   duration: number; // Duration in seconds
@@ -62,7 +69,7 @@ export class Video {
   status: string;
 
   @Column({ type: 'text', nullable: true })
-  processingError: string; // Error message if processing fails
+  processingError: string | null; // Error message if processing fails
 
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;

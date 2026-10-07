@@ -31,6 +31,7 @@ import { ModulesService } from './modules.service';
 import { CreateModuleDto } from './dto/create-module.dto';
 import { UpdateModuleDto } from './dto/update-module.dto';
 import { UploadVideoDto } from './dto/upload-video.dto';
+import { UpdateVideoDto } from './dto/update-video.dto';
 import { UploadSheetDto } from './dto/upload-sheet.dto';
 import { CompleteModuleDto } from './dto/complete-module.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -130,11 +131,16 @@ export class ModulesController {
   @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'courseId', description: 'Course ID' })
   @ApiParam({ name: 'id', description: 'Module ID' })
-  @ApiOperation({ summary: 'Upload video to module' })
+  @ApiOperation({
+    summary: 'Upload video to module',
+    description:
+      'Upload a video file or provide a direct video URL. Either file or videoUrl must be provided.',
+  })
   @ApiResponse({ status: 201, description: 'Video uploaded successfully' })
   @ApiResponse({
     status: 400,
-    description: 'Bad request - invalid file or duplicate sequence',
+    description:
+      'Bad request - either file or videoUrl required, or duplicate sequence',
   })
   @ApiResponse({
     status: 403,
@@ -144,7 +150,7 @@ export class ModulesController {
     @Param('courseId', ParseUUIDPipe) courseId: string,
     @Param('id', ParseUUIDPipe) moduleId: string,
     @Body() uploadVideoDto: UploadVideoDto,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile() file: Express.Multer.File | undefined,
     @CurrentUser() user: User,
   ) {
     return this.modulesService.uploadVideo(
@@ -153,6 +159,39 @@ export class ModulesController {
       file,
       user,
     );
+  }
+
+  @Patch('videos/:videoId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.TEACHER)
+  @ApiBearerAuth()
+  @UseInterceptors(FileInterceptor('video'))
+  @ApiConsumes('multipart/form-data')
+  @ApiParam({ name: 'courseId', description: 'Course ID' })
+  @ApiParam({ name: 'videoId', description: 'Video ID' })
+  @ApiOperation({
+    summary: 'Update video in module',
+    description:
+      'Update video metadata, replace with new file, or change to direct URL.',
+  })
+  @ApiResponse({ status: 200, description: 'Video updated successfully' })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad request - duplicate sequence or invalid data',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - insufficient permissions',
+  })
+  @ApiResponse({ status: 404, description: 'Video not found' })
+  updateVideo(
+    @Param('courseId', ParseUUIDPipe) courseId: string,
+    @Param('videoId', ParseUUIDPipe) videoId: string,
+    @Body() updateVideoDto: UpdateVideoDto,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: User,
+  ) {
+    return this.modulesService.updateVideo(videoId, updateVideoDto, file, user);
   }
 
   @Post(':id/sheets')

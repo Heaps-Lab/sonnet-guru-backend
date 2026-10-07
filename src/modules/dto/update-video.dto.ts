@@ -1,23 +1,22 @@
 import {
   IsString,
-  IsNotEmpty,
   IsNumber,
   IsBoolean,
   IsOptional,
   IsUrl,
   ValidateIf,
 } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 
-export class UploadVideoDto {
-  @ApiProperty({
+export class UpdateVideoDto {
+  @ApiPropertyOptional({
     description: 'Video title',
     example: 'Introduction to NestJS Guards',
   })
   @IsString()
-  @IsNotEmpty()
-  title!: string;
+  @IsOptional()
+  title?: string;
 
   @ApiPropertyOptional({
     description: 'Video description',
@@ -28,16 +27,17 @@ export class UploadVideoDto {
   @IsOptional()
   description?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Video sequence number within the module',
     example: 1,
   })
-  @Transform(({ value }) => parseInt(value))
+  @Transform(({ value }) => (value ? parseInt(value) : undefined))
   @IsNumber()
-  sequenceNumber!: number;
+  @IsOptional()
+  sequenceNumber?: number;
 
   @ApiPropertyOptional({
-    description: 'Direct video URL (alternative to file upload)',
+    description: 'Direct video URL (to replace uploaded video or update external URL)',
     example: 'https://example.com/videos/course-intro.mp4',
   })
   @ValidateIf((o) => o.videoUrl !== undefined && o.videoUrl !== '')
@@ -46,10 +46,9 @@ export class UploadVideoDto {
   videoUrl?: string;
 
   @ApiPropertyOptional({
-    description: 'Duration in seconds (required when using direct videoUrl)',
+    description: 'Duration in seconds (when updating videoUrl)',
     example: 300,
   })
-  @ValidateIf((o) => o.videoUrl !== undefined && o.videoUrl !== '')
   @IsNumber()
   @IsOptional()
   duration?: number;
@@ -57,10 +56,19 @@ export class UploadVideoDto {
   @ApiPropertyOptional({
     description: 'Whether the video can be downloaded',
     example: false,
-    default: true,
   })
-  @Transform(({ value }) => value === 'true')
+  @Transform(({ value }) => (value === 'true' ? true : value === 'false' ? false : undefined))
   @IsBoolean()
   @IsOptional()
   isDownloadable?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Whether to keep the current video or replace it (for URL updates)',
+    example: true,
+    default: true,
+  })
+  @Transform(({ value }) => value !== 'false')
+  @IsBoolean()
+  @IsOptional()
+  keepExisting?: boolean;
 }
