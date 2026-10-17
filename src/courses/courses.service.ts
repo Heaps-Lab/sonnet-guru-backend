@@ -66,7 +66,7 @@ export class CoursesService {
     return this.courseRepository.save(course);
   }
 
-  async findAll(user?: User): Promise<Course[]> {
+  async findAll(): Promise<Course[]> {
     // Note: modules are intentionally NOT joined/returned here. The list
     // endpoint is meant to be a lightweight course directory; full module
     // content is only returned from findOne() (GET /courses/:id).
@@ -74,22 +74,11 @@ export class CoursesService {
       .createQueryBuilder('course')
       .leftJoinAndSelect('course.instructor', 'instructor')
       .where('course.isActive = :isActive', { isActive: true });
-
-    if (user && [Role.SUPER_ADMIN, Role.ADMIN].includes(user.role)) {
-      // return queryBuilder.orderBy('course.createdAt', 'DESC').getMany();
-      // Admin/Super Admin: see ALL courses regardless of publish status
-    } else if (user && user.role === Role.TEACHER) {
-      // Teacher: see their own courses (any status) + other published courses
-      queryBuilder.andWhere(
-        '(course.instructorId = :instructorId OR course.isPublished = :isPublished)',
-        { instructorId: user.id, isPublished: true },
-      );
-    } else {
+ 
       // Students and unauthenticated: published only
       queryBuilder.andWhere('course.isPublished = :isPublished', {
         isPublished: true,
       });
-    }
 
     return queryBuilder.orderBy('course.createdAt', 'DESC').getMany();
   }

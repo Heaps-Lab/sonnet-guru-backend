@@ -55,13 +55,10 @@ export class CoursesController {
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.TEACHER, Role.STUDENT)
-  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get all courses' })
   @ApiResponse({ status: 200, description: 'Courses retrieved successfully' })
-  findAll(@CurrentUser() user?: User) {
-    return this.coursesService.findAll(user);
+  findAll() {
+    return this.coursesService.findAll();
   }
 
   @Get('my-courses')
